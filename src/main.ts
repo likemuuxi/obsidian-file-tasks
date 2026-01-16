@@ -1,99 +1,130 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Plugin, WorkspaceLeaf, TFile } from 'obsidian';
+import { TaskView, VIEW_TYPE_FILE_TASKS } from './views/TaskView';
+import { FileTasksSettings, DEFAULT_SETTINGS, FileTasksSettingTab } from './Settings';
+import { QuickAddModal } from './modals/QuickAddModal';
+import { CreateProjectModal } from './modals/CreateProjectModal';
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class FileTasksPlugin extends Plugin {
+	private view: TaskView | null = null;
+	settings: FileTasksSettings;
 
 	async onload() {
+		console.log('Loading File Tasks Plugin');
+
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+		this.registerView(
+			VIEW_TYPE_FILE_TASKS,
+			(leaf) => (this.view = new TaskView(leaf, this))
+		);
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		this.addSettingTab(new FileTasksSettingTab(this.app, this));
 
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
+			id: 'open-file-tasks-view',
+			name: 'Open File Tasks View',
 			callback: () => {
-				new SampleModal(this.app).open();
+				this.activateView();
 			}
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+		this.addCommand({
+			id: 'quick-add-task',
+			name: 'Quick Add Task',
+			callback: () => {
+				new QuickAddModal(this.app, this).open();
+			}
+		});
+
+		this.addCommand({
+			id: 'create-new-project',
+			name: 'Create New Project',
+			callback: () => {
+				new CreateProjectModal(this.app, this).open();
+			}
+		});
+
+		this.registerEvent(
+			this.app.workspace.on('file-open', async (file) => {
+				if (file) {
+					const content = await this.app.vault.read(file);
+					this.updateViews(file, content);
 				}
-				return false;
-			}
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on('modify', async (file) => {
+				if (file instanceof TFile && file === this.app.workspace.getActiveFile()) {
+					const content = await this.app.vault.read(file);
+					this.updateViews(file, content);
+				}
+			})
+		);
+
+		// Initial load
+		this.app.workspace.onLayoutReady(() => {
+			this.refreshActiveFile();
 		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
 	}
 
-	onunload() {
+	async refreshActiveFile() {
+		let file = this.app.workspace.getActiveFile();
+
+		if (!file) {
+			const markdownLeaves = this.app.workspace.getLeavesOfType('markdown');
+			if (markdownLeaves.length > 0) {
+				// @ts-ignore
+				file = markdownLeaves[0].view.file;
+			}
+		}
+
+		if (file instanceof TFile) {
+			const content = await this.app.vault.read(file);
+			this.updateViews(file, content);
+		}
+	}
+
+	updateViews(file: TFile, content: string) {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_FILE_TASKS);
+		leaves.forEach(leaf => {
+			// @ts-ignore
+			if (leaf.view && leaf.view.updateView) {
+				// @ts-ignore
+				leaf.view.updateView(file, content);
+			}
+		});
+	}
+
+	async onunload() {
+		console.log('Unloading File Tasks Plugin');
+	}
+
+	async activateView() {
+		const { workspace } = this.app;
+
+		let leaf: WorkspaceLeaf | null = null;
+		const leaves = workspace.getLeavesOfType(VIEW_TYPE_FILE_TASKS);
+
+		if (leaves.length > 0) {
+			const existing = leaves[0];
+			if (existing) leaf = existing;
+		} else {
+			leaf = workspace.getLeaf(true);
+			await leaf.setViewState({ type: VIEW_TYPE_FILE_TASKS, active: true });
+		}
+
+		if (leaf) {
+			workspace.revealLeaf(leaf);
+			this.refreshActiveFile();
+		}
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
 	}
 }
