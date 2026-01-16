@@ -2,6 +2,7 @@ import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu } 
 import FileTasksPlugin from '../main';
 import { FileAccess } from '../core/FileAccess';
 import { CreateProjectModal } from './CreateProjectModal';
+import { RenameProjectModal } from './RenameProjectModal';
 import { TaskView, ViewTask } from '../views/BaseTaskView';
 import { TaskListView } from '../views/TaskListView';
 import { TaskKanbanView } from '../views/TaskKanbanView';
@@ -302,6 +303,28 @@ export class QuickAddModal extends Modal {
             item.addEventListener('contextmenu', (event) => {
                 event.preventDefault();
                 const menu = new Menu();
+
+                menu.addItem((item) => {
+                    item.setTitle('Rename Project')
+                        .setIcon('pencil')
+                        .onClick(() => {
+                            const file = this.app.vault.getAbstractFileByPath(path);
+                            if (file instanceof TFile) {
+                                new RenameProjectModal(this.app, file, (newPath) => {
+                                    if (this.targetFile === path) {
+                                        this.targetFile = newPath;
+                                    }
+                                    // Update override map
+                                    if (this.projectStatusOverrides.has(path)) {
+                                        const status = this.projectStatusOverrides.get(path);
+                                        this.projectStatusOverrides.delete(path);
+                                        this.projectStatusOverrides.set(newPath, status!);
+                                    }
+                                    this.refreshSidebar();
+                                }).open();
+                            }
+                        });
+                });
 
                 // Status Submenu
                 menu.addItem((item) => {
