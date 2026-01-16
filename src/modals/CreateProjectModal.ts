@@ -5,10 +5,12 @@ export class CreateProjectModal extends Modal {
     plugin: FileTasksPlugin;
     projectName: string = '';
     onCreated: (() => void) | null = null;
+    basePath: string = '';
 
-    constructor(app: App, plugin: FileTasksPlugin, onCreated?: () => void) {
+    constructor(app: App, plugin: FileTasksPlugin, basePath?: string, onCreated?: () => void) {
         super(app);
         this.plugin = plugin;
+        this.basePath = basePath || '';
         if (onCreated) this.onCreated = onCreated;
     }
 
@@ -48,7 +50,10 @@ export class CreateProjectModal extends Modal {
         }
 
         const fileName = `${this.projectName}.md`;
-        let folderPath = this.plugin.settings.taskDirectory;
+        let folderPath = this.basePath;
+        if (!folderPath) {
+            folderPath = this.plugin.settings.taskDirectory;
+        }
 
         // Handle root directory or missing directory
         if (!folderPath || folderPath === '/') folderPath = '';

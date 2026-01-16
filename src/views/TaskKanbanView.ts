@@ -54,12 +54,8 @@ export class TaskKanbanView extends TaskView {
                 const sourceLineStr = e.dataTransfer?.getData('text/plain');
                 if (sourceLineStr) {
                     const sourceLine = parseInt(sourceLineStr);
-                    // Move to end of file (as simple default for 'bottom of column')
-                    const content = await this.modal.fileAccess.app.vault.read(file);
-                    const lines = content.split('\n');
-                    const targetIndex = lines.length - 1;
-
-                    await this.modal.fileAccess.moveTaskBlock(file, sourceLine, targetIndex, 'root', col.status);
+                    // Keep task in original position (in-place status update)
+                    await this.modal.fileAccess.moveTaskBlock(file, sourceLine, sourceLine, 'above', col.status);
                     await this.modal.updateTaskPreview();
                 }
             };

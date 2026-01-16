@@ -108,10 +108,15 @@
 .project-add-wrapper {
     padding: 10px;
     border-top: 1px solid var(--background-modifier-border);
+    display: flex;
+    gap: 8px;
 }
 
 .project-add-btn {
-    width: 100%;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* Middle Column - Task Preview */
@@ -499,6 +504,19 @@
     flex-shrink: 0;
     justify-content: flex-start;
     /* Ensure items align to left */
+    gap: 10px;
+}
+
+.show-completed-toggle {
+    padding: 6px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    box-shadow: none !important;
+}
+
+.show-completed-toggle.is-active {
+    color: var(--interactive-accent);
+    background-color: var(--background-modifier-hover);
 }
 
 .task-preview-list,
@@ -796,6 +814,75 @@
 .quadrant-cell.is-selected {
     box-shadow: inset 0 0 0 2px var(--interactive-accent);
     background-color: var(--background-primary-alt);
+}
+
+/* Folder Support Styles */
+.project-folder-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.project-folder-header {
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 2px;
+    font-size: 0.9em;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.project-folder-header:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.project-folder-header.sortable-drag-over {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-accent);
+    box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+.project-folder-children {
+    padding-left: 12px;
+    /* Indentation for nested items */
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--background-modifier-border-hover);
+    margin-left: 12px;
+}
+
+.project-folder-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: -6px;
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+    transition: transform 0.2s ease;
+}
+
+.project-folder-chevron:hover {
+    opacity: 1;
+    color: var(--text-normal);
+}
+
+.project-folder-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Adjust project item when inside folder (less padding if needed, or already handled by children container) */
+.project-folder-children .project-item {
+    padding-left: 8px;
+    /* Slightly tighter if deeply nested? Optional */
 }
 
 .quadrant-cell.drag-over {

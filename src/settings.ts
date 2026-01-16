@@ -8,6 +8,7 @@ export interface FileTasksSettings {
     defaultProjectView: string;
     closeWindowOnTaskAdd: boolean;
     defaultSelectFirstProject: boolean;
+    defaultShowCompleted: boolean;
 }
 
 export const DEFAULT_SETTINGS: FileTasksSettings = {
@@ -16,7 +17,8 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     defaultProjectStatus: 'active',
     defaultProjectView: 'list',
     closeWindowOnTaskAdd: true,
-    defaultSelectFirstProject: false
+    defaultSelectFirstProject: false,
+    defaultShowCompleted: true
 }
 
 export class FileTasksSettingTab extends PluginSettingTab {
@@ -102,6 +104,16 @@ export class FileTasksSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.defaultSelectFirstProject)
                 .onChange(async (value) => {
                     this.plugin.settings.defaultSelectFirstProject = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Completed Tasks by Default')
+            .setDesc('If enabled, completed tasks will be shown in the project view by default.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.defaultShowCompleted)
+                .onChange(async (value) => {
+                    this.plugin.settings.defaultShowCompleted = value;
                     await this.plugin.saveSettings();
                 }));
     }

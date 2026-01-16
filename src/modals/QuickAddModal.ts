@@ -1,7 +1,8 @@
-import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu } from 'obsidian';
+import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu, TFolder, TAbstractFile } from 'obsidian';
 import FileTasksPlugin from '../main';
 import { FileAccess } from '../core/FileAccess';
 import { CreateProjectModal } from './CreateProjectModal';
+import { CreateFolderModal } from './CreateFolderModal';
 import { RenameProjectModal } from './RenameProjectModal';
 import { TaskView, ViewTask } from '../views/BaseTaskView';
 import { TaskListView } from '../views/TaskListView';
@@ -36,11 +37,13 @@ export class QuickAddModal extends Modal {
     // View State
     currentViewType: 'list' | 'kanban' | 'quadrant' | 'week' | 'memo' = 'list';
     views: { [key: string]: TaskView } = {};
+    showCompleted: boolean = true;
 
     constructor(app: App, plugin: FileTasksPlugin) {
         super(app);
         this.plugin = plugin;
         this.fileAccess = new FileAccess(app);
+        this.showCompleted = this.plugin.settings.defaultShowCompleted;
 
         // Defaults
         // If "Select First Project" setting is on, try to get the first one
@@ -134,7 +137,7 @@ export class QuickAddModal extends Modal {
     //     }
     // }
 
-    renderSidebar(container: HTMLElement, projectsOverride?: TFile[]) {
+    renderSidebar(container: HTMLElement) {
         const leftCol = container.createDiv({ cls: 'quick-add-left' });
 
         // Header / Title for sidebar
@@ -162,22 +165,35 @@ export class QuickAddModal extends Modal {
         // 1. Default Inbox / Task File
         this.createProjectItem(listContainer, 'Inbox', this.plugin.settings.defaultTaskFile, true);
 
-        // 2. Active Projects
-        const projects = projectsOverride || this.getProjects();
-        projects.forEach(file => {
-            this.createProjectItem(listContainer, file.basename, file.path, false);
-        });
+        // 2. Tree Structure
+        const rootPath = this.plugin.settings.taskDirectory;
+        const tree = this.buildProjectTree(rootPath);
 
-        // 3. Create Project Button
+        this.renderTree(listContainer, tree);
+
+        // 3. Footer Actions (Create Project, Create Folder)
         const btnWrapper = leftCol.createDiv({ cls: 'project-add-wrapper' });
+
+        // New Project Button
         const addBtn = btnWrapper.createEl('button', { cls: 'project-add-btn' });
         setIcon(addBtn, 'plus');
-        addBtn.createSpan({ text: ' New Project', style: 'margin-left: 5px;' });
+        addBtn.setAttribute('title', 'New Project');
         addBtn.onclick = () => {
-            new CreateProjectModal(this.app, this.plugin, () => {
+            // Get currently selected folder if any, or default to root
+            // For now just root or let modal handle it
+            new CreateProjectModal(this.app, this.plugin, undefined, () => {
                 this.refreshSidebar();
             }).open();
-            // Don't close this modal
+        };
+
+        // New Folder Button
+        const addFolderBtn = btnWrapper.createEl('button', { cls: 'project-add-btn' });
+        setIcon(addFolderBtn, 'folder-plus');
+        addFolderBtn.setAttribute('title', 'New Folder');
+        addFolderBtn.onclick = () => {
+            new CreateFolderModal(this.app, this.plugin, this.plugin.settings.taskDirectory, () => {
+                this.refreshSidebar();
+            }).open();
         };
     }
 
@@ -187,9 +203,7 @@ export class QuickAddModal extends Modal {
             const leftCol = container.querySelector('.quick-add-left');
             if (leftCol) {
                 leftCol.remove();
-                this.renderSidebar(container as HTMLElement, projectsOverride);
-                // renderSidebar appends to container, so it will be at the end.
-                // We need to move it to the front.
+                this.renderSidebar(container as HTMLElement);
                 const newLeft = container.lastElementChild;
                 if (newLeft) container.prepend(newLeft);
             }
@@ -204,39 +218,201 @@ export class QuickAddModal extends Modal {
             if (taskDir && taskDir !== '/' && !file.path.startsWith(taskDir)) {
                 return false;
             }
-            const cache = this.app.metadataCache.getFileCache(file);
-            const isProject = cache?.frontmatter?.['project'] === true;
-
-            if (!isProject) return false;
-
-            if (this.filterStatus === 'all') return true;
-
-            let status = cache?.frontmatter?.['status'] || 'active';
-
-            // Check Persistent Override
-            if (this.projectStatusOverrides.has(file.path)) {
-                status = this.projectStatusOverrides.get(file.path)!;
+            if (this.isProject(file)) {
+                return true;
             }
-
-            return status === this.filterStatus;
+            return false;
         });
 
         return projects.sort((a, b) => {
-            const cacheA = this.app.metadataCache.getFileCache(a);
-            const cacheB = this.app.metadataCache.getFileCache(b);
-
-            // Default to very high number if missing, so they go to bottom
-            const valA = cacheA?.frontmatter?.['order'];
-            const valB = cacheB?.frontmatter?.['order'];
-
-            const orderA = (valA !== undefined && valA !== null) ? Number(valA) : 9999999999999;
-            const orderB = (valB !== undefined && valB !== null) ? Number(valB) : 9999999999999;
-
-            if (orderA !== orderB) {
-                return orderA - orderB;
-            }
-            return a.basename.localeCompare(b.basename);
+            // Re-use logic or duplicate sort
+            return this.getSortOrder(a) - this.getSortOrder(b);
         });
+    }
+
+    // Tree Node Structure
+    // Leaf: TFile (Project)
+    // Node: TFolder (Folder) -> children: [Node | Leaf]
+
+    buildProjectTree(path: string): (TFile | TFolder)[] {
+        const folder = this.app.vault.getAbstractFileByPath(path);
+        // If path is root '/', getAbstractFileByPath might return root folder or null logic depending on obsidian ver.
+        // Vault root is usually '/'.
+
+        let children: TAbstractFile[] = [];
+        if (folder instanceof TFolder) {
+            children = folder.children;
+        } else if (path === '/' || path === '') {
+            children = this.app.vault.getRoot().children;
+        }
+
+        // Filter and Sort
+        const items: (TFile | TFolder)[] = [];
+
+        children.forEach(file => {
+            if (file instanceof TFile && file.extension === 'md') {
+                if (this.isProject(file)) {
+                    items.push(file);
+                }
+            } else if (file instanceof TFolder) {
+                // Only include folder if it contains projects (recursively) OR users might want empty folders?
+                // Let's include all folders for now to allow creating projects in them
+                items.push(file);
+            }
+        });
+
+        // Sort items
+        return items.sort((a, b) => {
+            // Folders first
+            const aIsFolder = a instanceof TFolder;
+            const bIsFolder = b instanceof TFolder;
+
+            if (aIsFolder && !bIsFolder) return -1;
+            if (!aIsFolder && bIsFolder) return 1;
+
+            // Then by Order (files only) or Name
+            return this.getSortOrder(a) - this.getSortOrder(b);
+        });
+    }
+
+    isProject(file: TFile): boolean {
+        const cache = this.app.metadataCache.getFileCache(file);
+        const isProject = cache?.frontmatter?.['project'] === true;
+        if (!isProject) return false;
+
+        if (this.filterStatus === 'all') return true;
+
+        let status = cache?.frontmatter?.['status'] || 'active';
+        if (this.projectStatusOverrides.has(file.path)) {
+            status = this.projectStatusOverrides.get(file.path)!;
+        }
+        return status === this.filterStatus;
+    }
+
+    getSortOrder(file: TAbstractFile): number {
+        if (file instanceof TFile) {
+            const cache = this.app.metadataCache.getFileCache(file);
+            const val = cache?.frontmatter?.['order'];
+            if (val !== undefined && val !== null) return Number(val);
+        }
+        // Default based on name for stable sort if no order
+        return 9999999999999 + (file.name.charCodeAt(0) || 0);
+    }
+
+    renderTree(container: HTMLElement, items: (TFile | TFolder)[]) {
+        items.forEach(item => {
+            if (item instanceof TFolder) {
+                this.createFolderItem(container, item);
+            } else if (item instanceof TFile) {
+                this.createProjectItem(container, item.basename, item.path, false);
+            }
+        });
+    }
+
+    createFolderItem(container: HTMLElement, folder: TFolder) {
+        // Wrapper for Folder + Children
+        const folderWrapper = container.createDiv({ cls: 'project-folder-wrapper' });
+
+        // Header
+        const header = folderWrapper.createDiv({ cls: 'project-folder-header' });
+
+        // Chevron
+        const isCollapsed = this.plugin.settings.collapsedFolders.includes(folder.path);
+        const chevron = header.createDiv({ cls: 'project-folder-chevron' });
+        setIcon(chevron, isCollapsed ? 'chevron-right' : 'chevron-down');
+
+        // Name
+        const label = header.createSpan({ cls: 'project-folder-name', text: folder.name });
+
+        // Children Container
+        const childrenContainer = folderWrapper.createDiv({ cls: 'project-folder-children' });
+        if (isCollapsed) childrenContainer.style.display = 'none';
+
+        // Toggle Logic
+        header.onclick = async (e) => {
+            // Avoid toggling if clicking right-side actions if we add any
+            const currentlyCollapsed = childrenContainer.style.display === 'none';
+            if (currentlyCollapsed) {
+                childrenContainer.style.display = 'block';
+                setIcon(chevron, 'chevron-down');
+                this.plugin.settings.collapsedFolders.remove(folder.path);
+            } else {
+                childrenContainer.style.display = 'none';
+                setIcon(chevron, 'chevron-right');
+                if (!this.plugin.settings.collapsedFolders.includes(folder.path)) {
+                    this.plugin.settings.collapsedFolders.push(folder.path);
+                }
+            }
+            await this.plugin.saveSettings();
+        };
+
+        // Context Menu for Folder
+        header.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            const menu = new Menu();
+
+            menu.addItem((item) => {
+                item.setTitle('New Project Here')
+                    .setIcon('plus')
+                    .onClick(() => {
+                        new CreateProjectModal(this.app, this.plugin, folder.path, () => {
+                            this.refreshSidebar();
+                        }).open();
+                    });
+            });
+
+            menu.addItem((item) => {
+                item.setTitle('New Folder Here')
+                    .setIcon('folder-plus')
+                    .onClick(() => {
+                        new CreateFolderModal(this.app, this.plugin, folder.path, () => {
+                            this.refreshSidebar();
+                        }).open();
+                    });
+            });
+
+            menu.addItem((item) => {
+                item.setTitle('Rename Folder')
+                    .setIcon('pencil')
+                    .onClick(() => {
+                        // Simple rename logic
+                        // Use RenameProjectModal logic but adapted or simple prompt?
+                        // Let's implement full Rename Modal for folders later or reuse valid logic
+                        // For now, simple fallback or none. User asked for "Create Folder", not explicitly rename.
+                        // But standard expectation.
+                        // Let's rely on Obsidian file explorer for advanced folder ops if needed, 
+                        // or implement RenameFolderModal.
+                        // Skip for now to keep scope small as per user request (focus on Create/Drag/Expand).
+                        new Notice("Rename via File Explorer for now.");
+                    });
+            });
+
+            menu.showAtMouseEvent(event);
+        });
+
+        // Folder Drag & Drop (as Target)
+        header.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            header.addClass('sortable-drag-over');
+        });
+
+        header.addEventListener('dragleave', (e) => {
+            header.removeClass('sortable-drag-over');
+        });
+
+        header.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            header.removeClass('sortable-drag-over');
+            const draggedPath = e.dataTransfer?.getData('text/plain');
+            if (draggedPath) {
+                await this.handleItemMove(draggedPath, folder.path);
+            }
+        });
+
+        // Recursive Render
+        // Get contents of this folder
+        const folderChildren = this.buildProjectTree(folder.path);
+        this.renderTree(childrenContainer, folderChildren);
     }
 
     createProjectItem(container: HTMLElement, name: string, path: string, isDefault: boolean) {
@@ -255,6 +431,7 @@ export class QuickAddModal extends Modal {
             item.addEventListener('dragend', () => {
                 item.removeClass('sortable-ghost');
                 container.querySelectorAll('.project-item').forEach(el => el.removeClass('sortable-drag-over'));
+                container.querySelectorAll('.project-folder-header').forEach(el => el.removeClass('sortable-drag-over'));
             });
 
             item.addEventListener('dragover', (e) => {
@@ -272,7 +449,7 @@ export class QuickAddModal extends Modal {
                 item.removeClass('sortable-drag-over');
                 const draggedPath = e.dataTransfer?.getData('text/plain');
                 if (draggedPath && draggedPath !== path) {
-                    await this.handleProjectReorder(draggedPath, path);
+                    await this.handleItemMove(draggedPath, path);
                 }
             });
         }
@@ -289,7 +466,10 @@ export class QuickAddModal extends Modal {
 
         item.onclick = () => {
             this.targetFile = path;
-            container.querySelectorAll('.project-item').forEach(el => el.removeClass('is-active'));
+            // Clear active from all items in sidebar (re-querying simplistic but effective)
+            // Note: Since tree structure, we might have multiple .project-list containers if recursive? 
+            // No, .project-item is class.
+            this.modalEl.querySelectorAll('.project-item').forEach(el => el.removeClass('is-active'));
             item.addClass('is-active');
 
             // View Switching Logic based on frontmatter
@@ -381,44 +561,83 @@ export class QuickAddModal extends Modal {
         };
     }
 
-    async handleProjectReorder(draggedPath: string, targetPath: string) {
-        const projects = this.getProjects();
-        const draggedFile = projects.find(p => p.path === draggedPath);
-        const targetFile = projects.find(p => p.path === targetPath);
+    async handleItemMove(draggedPath: string, targetPath: string) {
+        const draggedFile = this.app.vault.getAbstractFileByPath(draggedPath);
+        const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
 
         if (!draggedFile || !targetFile) return;
 
-        const draggedIndex = projects.indexOf(draggedFile);
-        const targetIndex = projects.indexOf(targetFile);
+        // Condition 1: Dragging File to Folder -> Move File
+        if (targetFile instanceof TFolder) {
+            // Move file to this folder
+            const newPath = `${targetFile.path}/${draggedFile.name}`;
+            if (newPath !== draggedPath) {
+                await this.app.fileManager.renameFile(draggedFile, newPath);
+                if (this.targetFile === draggedPath) this.targetFile = newPath;
+                this.refreshSidebar();
+            }
+            return;
+        }
+
+        // Condition 2: Dragging File to File
+        if (draggedFile instanceof TFile && targetFile instanceof TFile) {
+            // If they are in the DIFFERENT folder -> Move Dragged to Target's Folder
+            if (draggedFile.parent?.path !== targetFile.parent?.path) {
+                if (targetFile.parent) {
+                    const newPath = `${targetFile.parent.path}/${draggedFile.name}`;
+                    // Special case: if targetFile.parent is root '/', check path construction
+                    const parentPath = targetFile.parent.path === '/' ? '' : targetFile.parent.path;
+                    const finalPath = parentPath ? `${parentPath}/${draggedFile.name}` : draggedFile.name; // Logic check
+
+                    // Simply use fileManager logic which handles moves
+                    // Actually fileManager.renameFile requires full path
+                    const destinationPath = `${targetFile.parent.path}/${draggedFile.name}`.replace('//', '/');
+
+                    if (destinationPath !== draggedPath) {
+                        await this.app.fileManager.renameFile(draggedFile, destinationPath);
+                        if (this.targetFile === draggedPath) this.targetFile = destinationPath;
+                        this.refreshSidebar();
+                    }
+                }
+            } else {
+                // If they are in the SAME folder -> REORDER
+                await this.handleProjectReorder(draggedFile, targetFile);
+            }
+        }
+    }
+
+    async handleProjectReorder(draggedFile: TFile, targetFile: TFile) {
+        // Get all projects in THIS specific folder
+        const parent = draggedFile.parent;
+        if (!parent) return;
+
+        // Build list of projects in this folder
+        const siblings = parent.children.filter(f =>
+            f instanceof TFile && this.isProject(f)
+        ) as TFile[];
+
+        // Sort them by current order
+        siblings.sort((a, b) => this.getSortOrder(a) - this.getSortOrder(b));
+
+        const draggedIndex = siblings.indexOf(draggedFile);
+        const targetIndex = siblings.indexOf(targetFile);
 
         if (draggedIndex === -1 || targetIndex === -1) return;
 
-        // Move item in array
-        // If dragging from above to below, the target index shifts down by 1 after removal
-        projects.splice(draggedIndex, 1);
-
+        siblings.splice(draggedIndex, 1);
         let insertIndex = targetIndex;
-        if (draggedIndex < targetIndex) {
-            insertIndex--;
-        }
+        if (draggedIndex < targetIndex) insertIndex--;
+        siblings.splice(insertIndex, 0, draggedFile);
 
-        projects.splice(insertIndex, 0, draggedFile);
-
-        // Update Order for ALL projects to ensure consistency (0, 1, 2...)
-        // This is robust against timestamp collisions or weird gaps.
-        // We can optimize to only update affected range if needed, but for small lists, full update is safe.
-        for (let i = 0; i < projects.length; i++) {
-            const file = projects[i];
-            // Use processFrontMatter to safely update
+        // Update Order
+        for (let i = 0; i < siblings.length; i++) {
+            const file = siblings[i];
             await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
                 frontmatter['order'] = i;
             });
         }
 
-        // Refresh Sidebar with IN-MEMORY order to avoid stale cache flicker
-        this.refreshSidebar(projects);
-        // Refresh Sidebar with IN-MEMORY order to avoid stale cache flicker
-        this.refreshSidebar(projects);
+        this.refreshSidebar();
     }
 
     async updateProjectStatus(path: string, status: string) {
@@ -474,6 +693,28 @@ export class QuickAddModal extends Modal {
                 this.updateTabVisuals();
                 this.updateTaskPreview();
                 this.refreshInputSection();
+            };
+
+            // Show Completed Toggle
+            const toggleBtn = header.createDiv({ cls: 'task-view-tab show-completed-toggle' });
+            toggleBtn.style.marginLeft = 'auto'; // Push to right
+            toggleBtn.style.cursor = 'pointer';
+            toggleBtn.title = 'Toggle Completed Tasks';
+
+            const updateToggleVisual = () => {
+                toggleBtn.empty();
+                setIcon(toggleBtn, this.showCompleted ? 'eye' : 'eye-off');
+                // Optional: visual indication of state
+                if (this.showCompleted) toggleBtn.addClass('is-active');
+                else toggleBtn.removeClass('is-active');
+            };
+
+            updateToggleVisual();
+
+            toggleBtn.onclick = () => {
+                this.showCompleted = !this.showCompleted;
+                updateToggleVisual();
+                this.updateTaskPreview();
             };
         } else {
             // Already exists, maybe update active state only?
@@ -649,10 +890,16 @@ export class QuickAddModal extends Modal {
                 }
             });
 
+            // Filter Completed
+            let tasksToRender = tasks;
+            if (!this.showCompleted) {
+                tasksToRender = tasks.filter(t => t.status !== 'done');
+            }
+
             // Render Current View
             const view = this.views[this.currentViewType];
             if (view) {
-                view.render(tasks, file);
+                view.render(tasksToRender, file);
             }
 
         } else {
