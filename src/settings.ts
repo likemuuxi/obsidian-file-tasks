@@ -8,6 +8,7 @@ export interface FileTasksSettings {
     defaultProjectView: string;
     closeWindowOnTaskAdd: boolean;
     defaultSelectFirstProject: boolean;
+    collapsedFolders: string[];
     defaultShowCompleted: boolean;
 }
 
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     defaultProjectView: 'list',
     closeWindowOnTaskAdd: true,
     defaultSelectFirstProject: false,
+    collapsedFolders: [],
     defaultShowCompleted: true
 }
 

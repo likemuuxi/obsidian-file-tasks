@@ -33,6 +33,15 @@ export class QuickAddModal extends Modal {
     filterStatus: string = 'active';
     activeKanbanStatus: string = 'todo'; // Default to todo
     private projectStatusOverrides: Map<string, string> = new Map();
+    private projectPinOverrides: Map<string, boolean> = new Map();
+
+    isPinned(file: TFile): boolean {
+        if (this.projectPinOverrides.has(file.path)) {
+            return this.projectPinOverrides.get(file.path)!;
+        }
+        const cache = this.app.metadataCache.getFileCache(file);
+        return cache?.frontmatter?.['pinned'] === true;
+    }
 
     // View State
     currentViewType: 'list' | 'kanban' | 'quadrant' | 'week' | 'memo' = 'list';
@@ -225,8 +234,13 @@ export class QuickAddModal extends Modal {
         });
 
         return projects.sort((a, b) => {
-            // Re-use logic or duplicate sort
-            return this.getSortOrder(a) - this.getSortOrder(b);
+            const aPinned = this.isPinned(a);
+            const bPinned = this.isPinned(b);
+
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
+
+            return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
         });
     }
 
@@ -270,8 +284,16 @@ export class QuickAddModal extends Modal {
             if (aIsFolder && !bIsFolder) return -1;
             if (!aIsFolder && bIsFolder) return 1;
 
-            // Then by Order (files only) or Name
-            return this.getSortOrder(a) - this.getSortOrder(b);
+            if (a instanceof TFile && b instanceof TFile) {
+                const aPinned = this.isPinned(a);
+                const bPinned = this.isPinned(b);
+
+                if (aPinned && !bPinned) return -1;
+                if (!aPinned && bPinned) return 1;
+            }
+
+            // Alphabetical Sort (for folders and unpinned files)
+            return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
         });
     }
 
@@ -287,16 +309,6 @@ export class QuickAddModal extends Modal {
             status = this.projectStatusOverrides.get(file.path)!;
         }
         return status === this.filterStatus;
-    }
-
-    getSortOrder(file: TAbstractFile): number {
-        if (file instanceof TFile) {
-            const cache = this.app.metadataCache.getFileCache(file);
-            const val = cache?.frontmatter?.['order'];
-            if (val !== undefined && val !== null) return Number(val);
-        }
-        // Default based on name for stable sort if no order
-        return 9999999999999 + (file.name.charCodeAt(0) || 0);
     }
 
     renderTree(container: HTMLElement, items: (TFile | TFolder)[]) {
@@ -464,6 +476,17 @@ export class QuickAddModal extends Modal {
 
         const label = item.createSpan({ text: name });
 
+        // Add Pin Icon if pinned
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) {
+            if (this.isPinned(file)) {
+                const pinIcon = item.createDiv({ cls: 'project-item-pin-icon' });
+                setIcon(pinIcon, 'pin');
+                pinIcon.style.opacity = '0.7';
+                pinIcon.style.transform = 'scale(0.8)';
+            }
+        }
+
         item.onclick = () => {
             this.targetFile = path;
             // Clear active from all items in sidebar (re-querying simplistic but effective)
@@ -483,6 +506,26 @@ export class QuickAddModal extends Modal {
             item.addEventListener('contextmenu', (event) => {
                 event.preventDefault();
                 const menu = new Menu();
+
+                // Pin/Unpin
+                const isPinned = this.isPinned(this.app.vault.getAbstractFileByPath(path) as TFile);
+                menu.addItem((item) => {
+                    item.setTitle(isPinned ? 'Unpin Project' : 'Pin Project')
+                        .setIcon('pin')
+                        .onClick(async () => {
+                            const file = this.app.vault.getAbstractFileByPath(path);
+                            if (file instanceof TFile) {
+                                // Set override immediately for UI responsiveness
+                                this.projectPinOverrides.set(path, !isPinned);
+                                this.refreshSidebar();
+
+                                await this.app.fileManager.processFrontMatter(file, (fm) => {
+                                    fm['pinned'] = !isPinned;
+                                    delete fm['order'];
+                                });
+                            }
+                        });
+                });
 
                 menu.addItem((item) => {
                     item.setTitle('Rename Project')
@@ -600,44 +643,10 @@ export class QuickAddModal extends Modal {
                     }
                 }
             } else {
-                // If they are in the SAME folder -> REORDER
-                await this.handleProjectReorder(draggedFile, targetFile);
+                // Same folder: Do nothing (Order property is deprecated)
+                return;
             }
         }
-    }
-
-    async handleProjectReorder(draggedFile: TFile, targetFile: TFile) {
-        // Get all projects in THIS specific folder
-        const parent = draggedFile.parent;
-        if (!parent) return;
-
-        // Build list of projects in this folder
-        const siblings = parent.children.filter(f =>
-            f instanceof TFile && this.isProject(f)
-        ) as TFile[];
-
-        // Sort them by current order
-        siblings.sort((a, b) => this.getSortOrder(a) - this.getSortOrder(b));
-
-        const draggedIndex = siblings.indexOf(draggedFile);
-        const targetIndex = siblings.indexOf(targetFile);
-
-        if (draggedIndex === -1 || targetIndex === -1) return;
-
-        siblings.splice(draggedIndex, 1);
-        let insertIndex = targetIndex;
-        if (draggedIndex < targetIndex) insertIndex--;
-        siblings.splice(insertIndex, 0, draggedFile);
-
-        // Update Order
-        for (let i = 0; i < siblings.length; i++) {
-            const file = siblings[i];
-            await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-                frontmatter['order'] = i;
-            });
-        }
-
-        this.refreshSidebar();
     }
 
     async updateProjectStatus(path: string, status: string) {
