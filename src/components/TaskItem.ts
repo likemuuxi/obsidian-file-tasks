@@ -1,6 +1,8 @@
-import { setIcon, TFile, MarkdownRenderer } from 'obsidian';
+import { setIcon, TFile, MarkdownRenderer, moment } from 'obsidian';
 import { ViewTask } from '../views/BaseTaskView';
 import { QuickAddModal } from '../modals/QuickAddModal';
+import { DateUtils } from '../utils/DateUtils';
+
 
 export interface TaskItemOptions {
     showIndent?: boolean;
@@ -211,18 +213,33 @@ export class TaskItem {
         // Metadata Icons (Dates)
         if (this.options.showDates !== false) {
             const metaSpan = contentWrapper.createSpan({ cls: 'task-metadata', style: 'margin-left: 8px; font-size: 0.8em; color: var(--text-muted);' });
+            // Unified Relative Format Handler
+            const formatRelativeDate = DateUtils.formatRelativeDate;
 
+            if (this.task.createdDate) {
+                const span = metaSpan.createSpan({ cls: 'task-date created-date' });
+                span.setText(`➕ ${formatRelativeDate(this.task.createdDate)} `);
+            }
+            if (this.task.completedDate) {
+                const span = metaSpan.createSpan({ cls: 'task-date completed-date' });
+                span.setText(`✅ ${formatRelativeDate(this.task.completedDate)} `);
+                span.style.textDecoration = 'none';
+            }
+            if (this.task.cancelledDate) {
+                const span = metaSpan.createSpan({ cls: 'task-date cancelled-date' });
+                span.setText(`❌ ${formatRelativeDate(this.task.cancelledDate)} `);
+            }
             if (this.task.dueDate) {
                 const span = metaSpan.createSpan({ cls: 'task-date due-date' });
-                span.setText(`📅 ${this.task.dueDate} `);
+                span.setText(`📅 ${formatRelativeDate(this.task.dueDate)} `);
             }
             if (this.task.scheduledDate) {
                 const span = metaSpan.createSpan({ cls: 'task-date scheduled-date' });
-                span.setText(`⏳ ${this.task.scheduledDate} `);
+                span.setText(`⏳ ${formatRelativeDate(this.task.scheduledDate)} `);
             }
             if (this.task.startDate) {
                 const span = metaSpan.createSpan({ cls: 'task-date start-date' });
-                span.setText(`🛫 ${this.task.startDate} `);
+                span.setText(`🛫 ${formatRelativeDate(this.task.startDate)} `);
             }
         }
 

@@ -1,10 +1,12 @@
 import { FileTask } from './TaskModel';
+import { DateUtils } from '../utils/DateUtils';
 
 export class TaskParser {
 
     // Regex patterns based on Tasks plugin and Obsidian markdown
     private static TASK_REGEX = /^(\s*)-\s\[(.)\]\s(.*)$/;
-    private static DATE_REGEX = /[📅⏳🛫]\s(\d{4}-\d{2}-\d{2})/g;
+    // Date Regex moved to DateUtils
+
     private static BLOCK_COMMENT_REGEX = /^%%%%$/;
 
     static parseContent(lines: string[]): FileTask[] {
@@ -103,18 +105,28 @@ export class TaskParser {
         // Dates
         // Dates
         let dateMatch;
-        while ((dateMatch = this.DATE_REGEX.exec(text)) !== null) {
-            const type = dateMatch[0].substring(0, 1); // 📅, etc.
-            const date = dateMatch[1];
+        const dateRegex = DateUtils.getDateRegex(); // Get new instance
+        while ((dateMatch = dateRegex.exec(text)) !== null) {
+            const type = dateMatch[1]; // Group 1 is type
+            const date = dateMatch[2]; // Group 2 is date
             if (type === '📅') metadata.dueDate = date;
             if (type === '⏳') metadata.scheduledDate = date;
             if (type === '🛫') metadata.startDate = date;
+            if (type === '✅') metadata.completedDate = date;
+            if (type === '➕') metadata.createdDate = date;
+            if (type === '❌') metadata.cancelledDate = date;
+
+            // Remove from description
+            description = description.replace(dateMatch[0], '');
         }
 
         // Priority
-        if (text.includes('⏫')) metadata.priority = 'High';
-        if (text.includes('🔼')) metadata.priority = 'Medium';
-        if (text.includes('🔽')) metadata.priority = 'Low';
+        // Priority
+        if (text.includes('⏫')) { metadata.priority = 'High'; description = description.replace('⏫', ''); }
+        if (text.includes('🔼')) { metadata.priority = 'Medium'; description = description.replace('🔼', ''); }
+        if (text.includes('🔽')) { metadata.priority = 'Low'; description = description.replace('🔽', ''); }
+
+        description = description.trim();
 
         return { description, metadata };
     }

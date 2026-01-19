@@ -12,6 +12,9 @@ export interface FileTask {
     dueDate?: string; // 📅 YYYY-MM-DD
     scheduledDate?: string; // ⏳ YYYY-MM-DD
     startDate?: string; // 🛫 YYYY-MM-DD
+    createdDate?: string; // ➕ YYYY-MM-DD
+    completedDate?: string; // ✅ YYYY-MM-DD
+    cancelledDate?: string; // ❌ YYYY-MM-DD
     priority?: string; // ⏫, 🔼, 🔽
 
     // Comments

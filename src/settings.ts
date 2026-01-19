@@ -4,8 +4,6 @@ import FileTasksPlugin from './main';
 export interface FileTasksSettings {
     taskDirectory: string;
     defaultTaskFile: string;
-    defaultProjectStatus: string;
-    defaultProjectView: string;
     closeWindowOnTaskAdd: boolean;
     defaultSelectFirstProject: boolean;
     collapsedFolders: string[];
@@ -17,8 +15,6 @@ export interface FileTasksSettings {
 export const DEFAULT_SETTINGS: FileTasksSettings = {
     taskDirectory: '/',
     defaultTaskFile: 'Inbox.md',
-    defaultProjectStatus: 'active',
-    defaultProjectView: 'list',
     closeWindowOnTaskAdd: true,
     defaultSelectFirstProject: false,
     collapsedFolders: [],
@@ -46,7 +42,7 @@ export class FileTasksSettingTab extends PluginSettingTab {
             .setName('Task Directory')
             .setDesc('Only scan for tasks in files within this directory.')
             .addText(text => text
-                .setPlaceholder('Example: Projects/Tasks')
+                .setPlaceholder('Example: Projects')
                 .setValue(this.plugin.settings.taskDirectory)
                 .onChange(async (value) => {
                     this.plugin.settings.taskDirectory = value;
@@ -67,49 +63,12 @@ export class FileTasksSettingTab extends PluginSettingTab {
         containerEl.createEl('h3', { text: 'Project Defaults' });
 
         new Setting(containerEl)
-            .setName('Default Project Status')
-            .setDesc('Status for newly created projects.')
-            .addDropdown(drop => drop
-                .addOption('active', 'Active')
-                .addOption('paused', 'Paused')
-                .addOption('completed', 'Completed')
-                .addOption('archived', 'Archived')
-                .setValue(this.plugin.settings.defaultProjectStatus)
-                .onChange(async (value) => {
-                    this.plugin.settings.defaultProjectStatus = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Default Project View')
-            .setDesc('View for newly created projects.')
-            .addDropdown(drop => drop
-                .addOption('list', 'List')
-                .addOption('kanban', 'Kanban')
-                .addOption('timeline', 'Timeline')
-                .setValue(this.plugin.settings.defaultProjectView)
-                .onChange(async (value) => {
-                    this.plugin.settings.defaultProjectView = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
             .setName('Close Window on Task Add')
             .setDesc('Automatically close the Quick Add window after adding a task.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.closeWindowOnTaskAdd)
                 .onChange(async (value) => {
                     this.plugin.settings.closeWindowOnTaskAdd = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Select First Project on Open')
-            .setDesc('If enabled, the first sorted project will be selected instead of the default Inbox data.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.defaultSelectFirstProject)
-                .onChange(async (value) => {
-                    this.plugin.settings.defaultSelectFirstProject = value;
                     await this.plugin.saveSettings();
                 }));
 

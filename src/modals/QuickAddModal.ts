@@ -1,5 +1,6 @@
-import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu, TFolder, TAbstractFile } from 'obsidian';
+import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu, TFolder, TAbstractFile, moment } from 'obsidian';
 import FileTasksPlugin from '../main';
+import { DateUtils } from '../utils/DateUtils';
 import { FileAccess } from '../core/FileAccess';
 import { CreateProjectModal } from './CreateProjectModal';
 import { CreateFolderModal } from './CreateFolderModal';
@@ -26,6 +27,9 @@ export class QuickAddModal extends Modal {
     dueDate: string = '';
     startDate: string = '';
     scheduledDate: string = '';
+    createdDate: string = '';
+    completedDate: string = '';
+    cancelledDate: string = '';
     priority: string = 'None';
     targetFile: string = '';
     previewRenderId: number = 0;
@@ -972,17 +976,33 @@ export class QuickAddModal extends Modal {
         else if (content.includes('🔽')) { priority = 'Low'; content = content.replace('🔽', '').trim(); }
         else if (content.includes('⏬')) { priority = 'Lowest'; content = content.replace('⏬', '').trim(); }
 
-        const dueMatch = content.match(/📅\s(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})?)/);
-        const dueDate = dueMatch ? dueMatch[1] : undefined;
-        if (dueMatch) content = content.replace(dueMatch[0], '').trim();
+        const dateRegex = DateUtils.getDateRegex(); // Get new instance
+        let dateMatch;
+        let dueDate: string | undefined;
+        let startDate: string | undefined;
+        let scheduledDate: string | undefined;
+        let createdDate: string | undefined;
+        let completedDate: string | undefined;
+        let cancelledDate: string | undefined;
 
-        const startMatch = content.match(/🛫\s(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})?)/);
-        const startDate = startMatch ? startMatch[1] : undefined;
-        if (startMatch) content = content.replace(startMatch[0], '').trim();
+        while ((dateMatch = dateRegex.exec(content)) !== null) {
+            const type = dateMatch[1];
+            const date = dateMatch[2];
 
-        const scheduledMatch = content.match(/⏳\s(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})?)/);
-        const scheduledDate = scheduledMatch ? scheduledMatch[1] : undefined;
-        if (scheduledMatch) content = content.replace(scheduledMatch[0], '').trim();
+            if (type === '📅') dueDate = date;
+            if (type === '🛫') startDate = date;
+            if (type === '⏳') scheduledDate = date;
+            if (type === '➕') createdDate = date;
+            if (type === '✅') completedDate = date;
+            if (type === '❌') cancelledDate = date;
+
+            // Remove from content
+            content = content.replace(dateMatch[0], '');
+
+            // CRITICAL: Reset regex index because string length changed
+            dateRegex.lastIndex = 0;
+        }
+        content = content.trim();
 
         // Cleaning Remarks
         const remarkMatch = content.match(/%%(.*?)%%/);
@@ -993,6 +1013,9 @@ export class QuickAddModal extends Modal {
         }
 
         return {
+            createdDate,
+            completedDate,
+            cancelledDate,
             line,
             lineNum: index,
             status,
@@ -1242,17 +1265,37 @@ export class QuickAddModal extends Modal {
         else if (content.includes('⏬')) { this.priority = 'Lowest'; content = content.replace('⏬', '').trim(); }
         else { this.priority = 'None'; }
 
-        const dueMatch = content.match(/📅\s(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})?)/);
-        this.dueDate = dueMatch ? dueMatch[1].replace('T', ' ') : '';
-        if (dueMatch) content = content.replace(dueMatch[0], '').trim();
+        const dateRegex = DateUtils.getDateRegex();
+        let dateMatch;
+        // Reset properties
+        this.dueDate = '';
+        this.startDate = '';
+        this.scheduledDate = '';
+        this.createdDate = '';
+        this.completedDate = '';
+        this.cancelledDate = '';
 
-        const startMatch = content.match(/🛫\s(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})?)/);
-        this.startDate = startMatch ? startMatch[1].replace('T', ' ') : '';
-        if (startMatch) content = content.replace(startMatch[0], '').trim();
+        while ((dateMatch = dateRegex.exec(content)) !== null) {
+            const type = dateMatch[1];
+            const date = dateMatch[2]; // Keep raw format for now, or normalize?
+            // Note: date input fields expect YYYY-MM-DD or YYYY-MM-DDTHH:mm
+            // But here we are just storing them. The UI binding uses `toInputFormat`.
+            // Wait, existing code replaced T with space.
+            // Let's keep consistent.
 
-        const scheduledMatch = content.match(/⏳\s(\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})?)/);
-        this.scheduledDate = scheduledMatch ? scheduledMatch[1].replace('T', ' ') : '';
-        if (scheduledMatch) content = content.replace(scheduledMatch[0], '').trim();
+            const cleanDate = date.replace('T', ' ');
+
+            if (type === '📅') this.dueDate = cleanDate;
+            if (type === '🛫') this.startDate = cleanDate;
+            if (type === '⏳') this.scheduledDate = cleanDate;
+            if (type === '➕') this.createdDate = cleanDate;
+            if (type === '✅') this.completedDate = cleanDate;
+            if (type === '❌') this.cancelledDate = cleanDate;
+
+            content = content.replace(dateMatch[0], '');
+            dateRegex.lastIndex = 0; // Reset for text length change
+        }
+        content = content.trim();
 
         this.description = content;
 
@@ -1330,10 +1373,15 @@ export class QuickAddModal extends Modal {
             if (this.scheduledDate) taskLine += ` ⏳ ${this.scheduledDate}`;
 
             // Auto Date Creation ➕
-            if (this.plugin.settings.autoDateManagement) {
-                const today = moment().format('YYYY-MM-DD');
+            if (this.createdDate) {
+                taskLine += ` ➕ ${this.createdDate}`;
+            } else if (this.plugin.settings.autoDateManagement && this.editingLineIndex === null) {
+                const today = moment().format('YYYY-MM-DD HH:mm');
                 taskLine += ` ➕ ${today}`;
             }
+
+            if (this.completedDate) taskLine += ` ✅ ${this.completedDate}`;
+            if (this.cancelledDate) taskLine += ` ❌ ${this.cancelledDate}`;
         }
 
         // Find File

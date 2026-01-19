@@ -56,7 +56,7 @@ export class FileAccess {
 
                     // Auto Date Logic
                     if (autoDate) {
-                        const today = moment().format('YYYY-MM-DD');
+                        const today = moment().format('YYYY-MM-DD HH:mm');
                         const completionDateStr = ` ✅ ${today}`;
 
                         if (status === 'done') {
@@ -71,11 +71,11 @@ export class FileAccess {
                                 }
                             }
                             // Remove any cancellation date if present
-                            newLine = newLine.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}/g, '');
+                            newLine = newLine.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?/g, '');
                         } else {
                             // Remove completion date if present (unchecking or doing)
                             // Regex to remove " ✅ YYYY-MM-DD" (allowing for flexible whitespace)
-                            newLine = newLine.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, '');
+                            newLine = newLine.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?/g, '');
                         }
                     }
 
@@ -326,7 +326,7 @@ export class FileAccess {
 
                     if (autoDate) {
                         // Remove cancellation date from metadata if present
-                        metadata = metadata.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}/g, '');
+                        metadata = metadata.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?/g, '');
                     }
                 } else {
                     // Add
@@ -335,13 +335,13 @@ export class FileAccess {
                     prefix = prefix.replace(/\[.\]/, '[-]');
 
                     if (autoDate) {
-                        const today = moment().format('YYYY-MM-DD');
+                        const today = moment().format('YYYY-MM-DD HH:mm');
                         const cancelDateStr = ` ❌ ${today}`;
                         if (!metadata.includes(cancelDateStr)) {
                             metadata = metadata + cancelDateStr;
                         }
                         // Remove completion date if present
-                        metadata = metadata.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, '');
+                        metadata = metadata.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?/g, '');
                     }
                 }
 
@@ -388,7 +388,7 @@ export class FileAccess {
                     let newLine = line.replace(/^(\s*-\s\[).(\])/, `$1${newStatusChar}$2`);
 
                     if (autoDate) {
-                        const today = moment().format('YYYY-MM-DD');
+                        const today = moment().format('YYYY-MM-DD HH:mm');
                         const completionDateStr = ` ✅ ${today}`;
 
                         if (newStatus === 'done') {
@@ -403,10 +403,10 @@ export class FileAccess {
                                 }
                             }
                             // Remove cancellation date if present
-                            newLine = newLine.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}/g, '');
+                            newLine = newLine.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?/g, '');
                         } else {
                             // Remove completion date if present (unchecking or doing)
-                            newLine = newLine.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, '');
+                            newLine = newLine.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?/g, '');
                         }
                     }
                     return newLine;

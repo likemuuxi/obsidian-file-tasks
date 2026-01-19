@@ -10,6 +10,9 @@ export interface ViewTask {
     dueDate?: string;
     startDate?: string;
     scheduledDate?: string;
+    createdDate?: string;
+    completedDate?: string;
+    cancelledDate?: string;
     priority?: string;
     indent: number;
     remarks?: string;
