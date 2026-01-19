@@ -55,7 +55,14 @@ export class TaskKanbanView extends TaskView {
                 if (sourceLineStr) {
                     const sourceLine = parseInt(sourceLineStr);
                     // Keep task in original position (in-place status update)
-                    await this.modal.fileAccess.moveTaskBlock(file, sourceLine, sourceLine, 'above', col.status);
+                    await this.modal.fileAccess.moveTaskBlock(
+                        file,
+                        sourceLine,
+                        sourceLine,
+                        'above',
+                        col.status,
+                        this.modal.plugin.settings.autoDateManagement // autoDate
+                    );
                     await this.modal.updateTaskPreview();
                 }
             };
