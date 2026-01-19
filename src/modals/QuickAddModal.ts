@@ -55,15 +55,27 @@ export class QuickAddModal extends Modal {
         this.showCompleted = this.plugin.settings.defaultShowCompleted;
 
         // Defaults
-        // If "Select First Project" setting is on, try to get the first one
-        if (this.plugin.settings.defaultSelectFirstProject) {
+        // 1. Priority: Custom Default Project setting
+        let foundSpecificTarget = false;
+        if (this.plugin.settings.customDefaultProject) {
+            const file = this.app.vault.getAbstractFileByPath(this.plugin.settings.customDefaultProject);
+            if (file instanceof TFile) {
+                this.targetFile = file.path;
+                foundSpecificTarget = true;
+            }
+        }
+
+        // 2. If 'Select First Project' setting is on (and no custom default set), try to get the first one
+        if (!foundSpecificTarget && this.plugin.settings.defaultSelectFirstProject) {
             const projects = this.getProjects(); // This returns sorted list
             if (projects.length > 0) {
                 this.targetFile = projects[0].path;
-            } else {
-                this.targetFile = this.plugin.settings.defaultTaskFile;
+                foundSpecificTarget = true;
             }
-        } else {
+        }
+
+        // 3. Fallback to default task file
+        if (!foundSpecificTarget) {
             this.targetFile = this.plugin.settings.defaultTaskFile;
         }
 
@@ -502,11 +514,22 @@ export class QuickAddModal extends Modal {
             this.updateTaskPreview();
         };
 
-        if (!isDefault) {
-            item.addEventListener('contextmenu', (event) => {
-                event.preventDefault();
-                const menu = new Menu();
+        item.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            const menu = new Menu();
 
+            // Set as Default Open Project (Available for ALL items including Inbox)
+            menu.addItem((item) => {
+                item.setTitle('Set as Default Open Project')
+                    .setIcon('star')
+                    .onClick(async () => {
+                        this.plugin.settings.customDefaultProject = path;
+                        await this.plugin.saveSettings();
+                        new Notice(`Project "${name}" set as default open project`);
+                    });
+            });
+
+            if (!isDefault) {
                 // Pin/Unpin
                 const isPinned = this.isPinned(this.app.vault.getAbstractFileByPath(path) as TFile);
                 menu.addItem((item) => {
@@ -590,10 +613,10 @@ export class QuickAddModal extends Modal {
                             }
                         });
                 });
+            }
 
-                menu.showAtMouseEvent(event);
-            });
-        }
+            menu.showAtMouseEvent(event);
+        });
 
         item.ondblclick = async () => {
             const file = this.app.vault.getAbstractFileByPath(path);

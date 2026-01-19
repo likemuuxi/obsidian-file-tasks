@@ -10,6 +10,7 @@ export interface FileTasksSettings {
     defaultSelectFirstProject: boolean;
     collapsedFolders: string[];
     defaultShowCompleted: boolean;
+    customDefaultProject: string; // New setting
 }
 
 export const DEFAULT_SETTINGS: FileTasksSettings = {
@@ -20,7 +21,8 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     closeWindowOnTaskAdd: true,
     defaultSelectFirstProject: false,
     collapsedFolders: [],
-    defaultShowCompleted: true
+    defaultShowCompleted: true,
+    customDefaultProject: ''
 }
 
 export class FileTasksSettingTab extends PluginSettingTab {
