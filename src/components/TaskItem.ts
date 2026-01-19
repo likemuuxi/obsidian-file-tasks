@@ -181,7 +181,9 @@ export class TaskItem {
                 await this.modal.fileAccess.toggleTaskStatus(
                     this.file,
                     this.task.lineNum,
-                    this.task.status
+                    this.task.status,
+                    true, // autoCheck
+                    this.modal.plugin.settings.autoDateManagement // autoDate
                 );
                 await this.modal.updateTaskPreview();
             };
@@ -267,7 +269,11 @@ export class TaskItem {
         archiveBtn.title = 'Archive (Strikethrough)';
         archiveBtn.onclick = async (e) => {
             e.stopPropagation();
-            await this.modal.fileAccess.toggleTaskStrikethrough(this.file, this.task.lineNum);
+            await this.modal.fileAccess.toggleTaskStrikethrough(
+                this.file,
+                this.task.lineNum,
+                this.modal.plugin.settings.autoDateManagement // autoDate
+            );
             await this.modal.updateTaskPreview();
         };
 

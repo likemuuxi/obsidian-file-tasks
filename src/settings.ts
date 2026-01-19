@@ -11,6 +11,7 @@ export interface FileTasksSettings {
     collapsedFolders: string[];
     defaultShowCompleted: boolean;
     customDefaultProject: string; // New setting
+    autoDateManagement: boolean;
 }
 
 export const DEFAULT_SETTINGS: FileTasksSettings = {
@@ -22,7 +23,8 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     defaultSelectFirstProject: false,
     collapsedFolders: [],
     defaultShowCompleted: true,
-    customDefaultProject: ''
+    customDefaultProject: '',
+    autoDateManagement: false
 }
 
 export class FileTasksSettingTab extends PluginSettingTab {
@@ -118,6 +120,16 @@ export class FileTasksSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.defaultShowCompleted)
                 .onChange(async (value) => {
                     this.plugin.settings.defaultShowCompleted = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Automatic Date Management')
+            .setDesc('Automatically add dates when tasks are created (➕), completed (✅), or cancelled (❌).')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.autoDateManagement)
+                .onChange(async (value) => {
+                    this.plugin.settings.autoDateManagement = value;
                     await this.plugin.saveSettings();
                 }));
     }

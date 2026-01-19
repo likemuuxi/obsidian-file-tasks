@@ -1328,6 +1328,12 @@ export class QuickAddModal extends Modal {
             if (this.dueDate) taskLine += ` 📅 ${this.dueDate}`;
             if (this.startDate) taskLine += ` 🛫 ${this.startDate}`;
             if (this.scheduledDate) taskLine += ` ⏳ ${this.scheduledDate}`;
+
+            // Auto Date Creation ➕
+            if (this.plugin.settings.autoDateManagement) {
+                const today = moment().format('YYYY-MM-DD');
+                taskLine += ` ➕ ${today}`;
+            }
         }
 
         // Find File

@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, moment } from 'obsidian';
 
 export class FileAccess {
     app: App;
@@ -25,7 +25,7 @@ export class FileAccess {
         }
     }
 
-    async toggleTaskStatus(file: TFile, lineNumber: number, currentStatus: string, autoCheck: boolean = true) {
+    async toggleTaskStatus(file: TFile, lineNumber: number, currentStatus: string, autoCheck: boolean = true, autoDate: boolean = false) {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
 
@@ -52,7 +52,34 @@ export class FileAccess {
                 const char = this.getStatusChar(status);
                 // Only update if changed
                 if (match[2] !== char) {
-                    lines[index] = `${match[1]}${char}${match[3]}`;
+                    let newLine = `${match[1]}${char}${match[3]}`;
+
+                    // Auto Date Logic
+                    if (autoDate) {
+                        const today = moment().format('YYYY-MM-DD');
+                        const completionDateStr = ` ✅ ${today}`;
+
+                        if (status === 'done') {
+                            // Add completion date if not present
+                            if (!newLine.includes(completionDateStr)) {
+                                // Insert before remarks (%%) or at end
+                                const remarkIndex = newLine.indexOf('%%');
+                                if (remarkIndex !== -1) {
+                                    newLine = newLine.substring(0, remarkIndex).trimEnd() + completionDateStr + ' ' + newLine.substring(remarkIndex);
+                                } else {
+                                    newLine = newLine.trimEnd() + completionDateStr;
+                                }
+                            }
+                            // Remove any cancellation date if present
+                            newLine = newLine.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}/g, '');
+                        } else {
+                            // Remove completion date if present (unchecking or doing)
+                            // Regex to remove " ✅ YYYY-MM-DD" (allowing for flexible whitespace)
+                            newLine = newLine.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, '');
+                        }
+                    }
+
+                    lines[index] = newLine;
                     visited.add(index);
                 }
             }
@@ -270,7 +297,7 @@ export class FileAccess {
         return indent.replace(/\t/g, '    ').length;
     }
 
-    async toggleTaskStrikethrough(file: TFile, lineNumber: number) {
+    async toggleTaskStrikethrough(file: TFile, lineNumber: number, autoDate: boolean = false) {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
 
@@ -284,10 +311,10 @@ export class FileAccess {
             // Let's assume structure: Status + Content
             const statusMatch = line.match(/^(\s*-\s\[.\]\s)(.*)$/);
             if (statusMatch) {
-                const prefix = statusMatch[1];
+                let prefix = statusMatch[1];
                 let body = statusMatch[2];
                 let metadata = '';
-                const metadataRegex = /(\s+([🔺⏫🔼🔽☕]|(?:🛫|⏳|📅)\s\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?|%%.*?%%).*)$/;
+                const metadataRegex = /(\s+([🔺⏫🔼🔽☕✅❌➕]|(?:🛫|⏳|📅)\s\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?|%%.*?%%).*)$/;
                 const metaMatch = body.match(metadataRegex);
                 if (metaMatch) {
                     metadata = metaMatch[1];
@@ -298,187 +325,204 @@ export class FileAccess {
                 if (body.startsWith('~~') && body.endsWith('~~')) {
                     // Remove
                     body = body.substring(2, body.length - 2);
+                    // Restore status to Todo
+                    prefix = prefix.replace(/\[-\]/, '[ ]');
+
+                    if (autoDate) {
+                        // Remove cancellation date from metadata if present
+                        metadata = metadata.replace(/\s*❌\s*\d{4}-\d{2}-\d{2}/g, '');
+                    }
                 } else {
                     // Add
                     body = `~~${body}~~`;
-                }
+                    // Change status to Cancelled [-]
+                    prefix = prefix.replace(/\[.\]/, '[-]');
 
-                lines[lineNumber] = `${prefix}${body}${metadata}`;
-                await this.app.vault.modify(file, lines.join('\n'));
+                    const today = moment().format('YYYY-MM-DD');
+                    const cancelDateStr = ` ❌ ${today}`;
+                    if (!metadata.includes(cancelDateStr)) {
+                        metadata = metadata + cancelDateStr;
+                    }
+                    // Remove completion date if present
+                    metadata = metadata.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, '');
+                }
             }
+
+            lines[lineNumber] = `${prefix}${body}${metadata}`;
+            await this.app.vault.modify(file, lines.join('\n'));
         }
     }
+}
 
+    async moveTaskBlock(file: TFile, sourceIndex: number, targetIndex: number, action: 'child' | 'above' | 'below' | 'root', newStatus ?: string) {
+    const content = await this.app.vault.read(file);
+    let lines = content.split('\n');
 
-    async moveTaskBlock(file: TFile, sourceIndex: number, targetIndex: number, action: 'child' | 'above' | 'below' | 'root', newStatus?: string) {
-        const content = await this.app.vault.read(file);
-        let lines = content.split('\n');
+    if (sourceIndex < 0 || sourceIndex >= lines.length || targetIndex < 0 || targetIndex >= lines.length) return;
+    if (sourceIndex === targetIndex && !newStatus) return;
 
-        if (sourceIndex < 0 || sourceIndex >= lines.length || targetIndex < 0 || targetIndex >= lines.length) return;
-        if (sourceIndex === targetIndex && !newStatus) return;
+    // 1. Identify Source Block
+    const sourceIndentLevel = this.getIndentLevel(lines[sourceIndex]);
+    let sourceEnd = sourceIndex;
+    for (let i = sourceIndex + 1; i < lines.length; i++) {
+        if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) <= sourceIndentLevel) break;
+        sourceEnd = i;
+    }
+    let block = lines.slice(sourceIndex, sourceEnd + 1);
 
-        // 1. Identify Source Block
-        const sourceIndentLevel = this.getIndentLevel(lines[sourceIndex]);
-        let sourceEnd = sourceIndex;
-        for (let i = sourceIndex + 1; i < lines.length; i++) {
-            if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) <= sourceIndentLevel) break;
-            sourceEnd = i;
-        }
-        let block = lines.slice(sourceIndex, sourceEnd + 1);
+    // 2. Remove Source
+    lines.splice(sourceIndex, block.length);
 
-        // 2. Remove Source
-        lines.splice(sourceIndex, block.length);
+    // Adjust Target
+    let adjustedTargetIndex = targetIndex;
+    if (sourceIndex < targetIndex) {
+        adjustedTargetIndex -= block.length;
+    }
 
-        // Adjust Target
-        let adjustedTargetIndex = targetIndex;
-        if (sourceIndex < targetIndex) {
-            adjustedTargetIndex -= block.length;
-        }
+    // Output safety check
+    if (adjustedTargetIndex < 0) adjustedTargetIndex = 0; // Should not happen given constraints
 
-        // Output safety check
-        if (adjustedTargetIndex < 0) adjustedTargetIndex = 0; // Should not happen given constraints
-
-        // Apply Status Change if needed
-        if (newStatus) {
-            const newStatusChar = this.getStatusChar(newStatus);
-            // Update ALL tasks in the block recursively
-            block = block.map(line => {
-                if (/^\s*-\s\[.\]/.test(line)) {
-                    return line.replace(/^(\s*-\s\[).(\])/, `$1${newStatusChar}$2`);
-                }
-                return line;
-            });
-        }
-
-        // 3. Indentation & Insertion
-        const targetLine = lines[adjustedTargetIndex];
-        const targetIndentStr = targetLine ? this.getIndentStr(targetLine) : '';
-        const sourceIndentStr = this.getIndentStr(block[0]);
-        const indentUnit = '\t';
-
-        let insertIndex = adjustedTargetIndex;
-        let newBaseIndent = '';
-
-        if (action === 'root') {
-            insertIndex = adjustedTargetIndex + 1; // Append after target
-            newBaseIndent = ''; // Force Root
-        } else if (action === 'child') {
-            insertIndex = adjustedTargetIndex + 1;
-            newBaseIndent = targetIndentStr + indentUnit;
-        } else if (action === 'above') {
-            insertIndex = adjustedTargetIndex;
-            newBaseIndent = targetIndentStr;
-        } else if (action === 'below') {
-            // Insert after target's subtree
-            if (targetLine) {
-                const targetIndentLevel = this.getIndentLevel(targetLine);
-                let targetEnd = adjustedTargetIndex;
-                for (let i = adjustedTargetIndex + 1; i < lines.length; i++) {
-                    if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) <= targetIndentLevel) break;
-                    targetEnd = i;
-                }
-                insertIndex = targetEnd + 1;
-                newBaseIndent = targetIndentStr;
-            } else {
-                insertIndex = adjustedTargetIndex + 1;
-                newBaseIndent = '';
-            }
-        }
-
-        // Re-indent Block
+    // Apply Status Change if needed
+    if (newStatus) {
+        const newStatusChar = this.getStatusChar(newStatus);
+        // Update ALL tasks in the block recursively
         block = block.map(line => {
-            if (line.startsWith(sourceIndentStr)) {
-                return newBaseIndent + line.substring(sourceIndentStr.length);
+            if (/^\s*-\s\[.\]/.test(line)) {
+                return line.replace(/^(\s*-\s\[).(\])/, `$1${newStatusChar}$2`);
             }
             return line;
         });
-
-        // 4. Insert Block
-        lines.splice(insertIndex, 0, ...block);
-        await this.app.vault.modify(file, lines.join('\n'));
     }
+
+    // 3. Indentation & Insertion
+    const targetLine = lines[adjustedTargetIndex];
+    const targetIndentStr = targetLine ? this.getIndentStr(targetLine) : '';
+    const sourceIndentStr = this.getIndentStr(block[0]);
+    const indentUnit = '\t';
+
+    let insertIndex = adjustedTargetIndex;
+    let newBaseIndent = '';
+
+    if (action === 'root') {
+        insertIndex = adjustedTargetIndex + 1; // Append after target
+        newBaseIndent = ''; // Force Root
+    } else if (action === 'child') {
+        insertIndex = adjustedTargetIndex + 1;
+        newBaseIndent = targetIndentStr + indentUnit;
+    } else if (action === 'above') {
+        insertIndex = adjustedTargetIndex;
+        newBaseIndent = targetIndentStr;
+    } else if (action === 'below') {
+        // Insert after target's subtree
+        if (targetLine) {
+            const targetIndentLevel = this.getIndentLevel(targetLine);
+            let targetEnd = adjustedTargetIndex;
+            for (let i = adjustedTargetIndex + 1; i < lines.length; i++) {
+                if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) <= targetIndentLevel) break;
+                targetEnd = i;
+            }
+            insertIndex = targetEnd + 1;
+            newBaseIndent = targetIndentStr;
+        } else {
+            insertIndex = adjustedTargetIndex + 1;
+            newBaseIndent = '';
+        }
+    }
+
+    // Re-indent Block
+    block = block.map(line => {
+        if (line.startsWith(sourceIndentStr)) {
+            return newBaseIndent + line.substring(sourceIndentStr.length);
+        }
+        return line;
+    });
+
+    // 4. Insert Block
+    lines.splice(insertIndex, 0, ...block);
+    await this.app.vault.modify(file, lines.join('\n'));
+}
 
     async deleteTaskBlock(file: TFile, lineIndex: number) {
-        const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
+    const content = await this.app.vault.read(file);
+    const lines = content.split('\n');
 
-        if (lineIndex < 0 || lineIndex >= lines.length) return;
+    if (lineIndex < 0 || lineIndex >= lines.length) return;
 
-        // 1. Identify Source Block (Task + Subtree)
-        const sourceIndentLevel = this.getIndentLevel(lines[lineIndex]);
-        let sourceEnd = lineIndex;
-        for (let i = lineIndex + 1; i < lines.length; i++) {
-            const line = lines[i];
-            // Stop if line is not empty and has indentation <= source
-            if (line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
-            sourceEnd = i;
-        }
-
-        // 2. Remove Block
-        lines.splice(lineIndex, sourceEnd - lineIndex + 1);
-
-        await this.app.vault.modify(file, lines.join('\n'));
+    // 1. Identify Source Block (Task + Subtree)
+    const sourceIndentLevel = this.getIndentLevel(lines[lineIndex]);
+    let sourceEnd = lineIndex;
+    for (let i = lineIndex + 1; i < lines.length; i++) {
+        const line = lines[i];
+        // Stop if line is not empty and has indentation <= source
+        if (line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
+        sourceEnd = i;
     }
+
+    // 2. Remove Block
+    lines.splice(lineIndex, sourceEnd - lineIndex + 1);
+
+    await this.app.vault.modify(file, lines.join('\n'));
+}
     async appendMemo(file: TFile, memoLine: string) {
-        const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
+    const content = await this.app.vault.read(file);
+    const lines = content.split('\n');
 
-        // Find "# Memo" line
-        const memoIndex = lines.findIndex(l => l.trim() === '# Memo');
+    // Find "# Memo" line
+    const memoIndex = lines.findIndex(l => l.trim() === '# Memo');
 
-        let newContent = '';
-        if (memoIndex !== -1) {
-            // Insert after # Memo header
-            lines.splice(memoIndex + 1, 0, memoLine);
-            newContent = lines.join('\n');
-        } else {
-            // Append # Memo and content at the end if not exists?
-            // User requirement: "Memos are always added below # Memo".
-            // If it doesn't exist, Create it.
-            if (lines[lines.length - 1].trim() !== '') {
-                lines.push('');
-            }
-            lines.push('# Memo');
-            lines.push('\n');
-            lines.push(memoLine);
-            newContent = lines.join('\n');
+    let newContent = '';
+    if (memoIndex !== -1) {
+        // Insert after # Memo header
+        lines.splice(memoIndex + 1, 0, memoLine);
+        newContent = lines.join('\n');
+    } else {
+        // Append # Memo and content at the end if not exists?
+        // User requirement: "Memos are always added below # Memo".
+        // If it doesn't exist, Create it.
+        if (lines[lines.length - 1].trim() !== '') {
+            lines.push('');
         }
-
-        await this.app.vault.modify(file, newContent);
+        lines.push('# Memo');
+        lines.push('\n');
+        lines.push(memoLine);
+        newContent = lines.join('\n');
     }
+
+    await this.app.vault.modify(file, newContent);
+}
 
     async deleteMemoLines(file: TFile, startLine: number, endLine: number) {
-        const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
+    const content = await this.app.vault.read(file);
+    const lines = content.split('\n');
 
-        if (startLine < 0 || endLine >= lines.length || startLine > endLine) {
-            console.error('Invalid line range for deletion');
-            return;
-        }
-
-        // Remove lines from startLine to endLine (inclusive)
-        lines.splice(startLine, endLine - startLine + 1);
-
-        const newContent = lines.join('\n');
-        await this.app.vault.modify(file, newContent);
+    if (startLine < 0 || endLine >= lines.length || startLine > endLine) {
+        console.error('Invalid line range for deletion');
+        return;
     }
+
+    // Remove lines from startLine to endLine (inclusive)
+    lines.splice(startLine, endLine - startLine + 1);
+
+    const newContent = lines.join('\n');
+    await this.app.vault.modify(file, newContent);
+}
 
     async replaceMemoLines(file: TFile, startLine: number, endLine: number, newContent: string) {
-        const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
+    const content = await this.app.vault.read(file);
+    const lines = content.split('\n');
 
-        if (startLine < 0 || endLine >= lines.length || startLine > endLine) {
-            console.error('Invalid line range for replacement');
-            return;
-        }
-
-        // Replace the range with new lines
-        // newContent might be multiple lines
-        const newLines = newContent.split('\n');
-
-        lines.splice(startLine, endLine - startLine + 1, ...newLines);
-
-        const finalContent = lines.join('\n');
-        await this.app.vault.modify(file, finalContent);
+    if (startLine < 0 || endLine >= lines.length || startLine > endLine) {
+        console.error('Invalid line range for replacement');
+        return;
     }
+
+    // Replace the range with new lines
+    // newContent might be multiple lines
+    const newLines = newContent.split('\n');
+
+    lines.splice(startLine, endLine - startLine + 1, ...newLines);
+
+    const finalContent = lines.join('\n');
+    await this.app.vault.modify(file, finalContent);
+}
 }
