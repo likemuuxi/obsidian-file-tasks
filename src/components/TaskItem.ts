@@ -142,6 +142,15 @@ export class TaskItem {
             item.style.backgroundColor = 'var(--background-modifier-active-hover)';
         }
 
+        // Apply Status Class
+        if (this.task.status === 'cancelled') {
+            item.addClass('is-cancelled');
+        } else if (this.task.status === 'done') {
+            item.addClass('is-checked');
+        } else if (this.task.status === 'doing') {
+            item.addClass('is-doing');
+        }
+
         // Click Handlers
         item.onclick = (e) => {
             e.stopPropagation();
@@ -173,6 +182,12 @@ export class TaskItem {
             } else if (this.task.status === 'doing') {
                 checkbox.addClass('is-doing');
                 checkbox.setText('/');
+                checkbox.style.fontSize = '10px';
+                checkbox.style.textAlign = 'center';
+                checkbox.style.lineHeight = '12px';
+            } else if (this.task.status === 'cancelled') {
+                checkbox.addClass('is-cancelled');
+                checkbox.setText('-');
                 checkbox.style.fontSize = '10px';
                 checkbox.style.textAlign = 'center';
                 checkbox.style.lineHeight = '12px';

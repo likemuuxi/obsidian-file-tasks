@@ -20,13 +20,13 @@ export default class FileTasksPlugin extends Plugin {
 
 		this.addSettingTab(new FileTasksSettingTab(this.app, this));
 
-		this.addCommand({
-			id: 'open-file-tasks-view',
-			name: 'Open File Tasks View',
-			callback: () => {
-				this.activateView();
-			}
-		});
+		// this.addCommand({
+		// 	id: 'open-file-tasks-view',
+		// 	name: 'Open File Tasks View',
+		// 	callback: () => {
+		// 		this.activateView();
+		// 	}
+		// });
 
 		this.addCommand({
 			id: 'quick-add-task',
@@ -44,23 +44,23 @@ export default class FileTasksPlugin extends Plugin {
 			}
 		});
 
-		this.registerEvent(
-			this.app.workspace.on('file-open', async (file) => {
-				if (file) {
-					const content = await this.app.vault.read(file);
-					this.updateViews(file, content);
-				}
-			})
-		);
+		// this.registerEvent(
+		// 	this.app.workspace.on('file-open', async (file) => {
+		// 		if (file) {
+		// 			const content = await this.app.vault.read(file);
+		// 			this.updateViews(file, content);
+		// 		}
+		// 	})
+		// );
 
-		this.registerEvent(
-			this.app.vault.on('modify', async (file) => {
-				if (file instanceof TFile && file === this.app.workspace.getActiveFile()) {
-					const content = await this.app.vault.read(file);
-					this.updateViews(file, content);
-				}
-			})
-		);
+		// this.registerEvent(
+		// 	this.app.vault.on('modify', async (file) => {
+		// 		if (file instanceof TFile && file === this.app.workspace.getActiveFile()) {
+		// 			const content = await this.app.vault.read(file);
+		// 			this.updateViews(file, content);
+		// 		}
+		// 	})
+		// );
 
 		// Initial load
 		this.app.workspace.onLayoutReady(() => {

@@ -2,7 +2,7 @@ export interface FileTask {
     id: string; // Unique ID (line hash or similar)
     originalLine: string;
     description: string;
-    status: 'todo' | 'doing' | 'done';
+    status: 'todo' | 'doing' | 'done' | 'cancelled';
     lineNumber: number;
     indentation: number;
     parent?: FileTask;

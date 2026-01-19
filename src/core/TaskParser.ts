@@ -45,7 +45,10 @@ export class TaskParser {
                 const [_, indentStr, status, text] = match;
                 if (indentStr === undefined || status === undefined || text === undefined) continue;
                 const indentation = indentStr.length;
-                const completed = status !== ' ';
+                let taskStatus: 'todo' | 'doing' | 'done' | 'cancelled' = 'todo';
+                if (status === 'x' || status === 'X') taskStatus = 'done';
+                else if (status === '/') taskStatus = 'doing';
+                else if (status === '-') taskStatus = 'cancelled';
 
                 // Extract metadata from text
                 const { description, metadata } = this.extractMetadata(text);
@@ -54,7 +57,7 @@ export class TaskParser {
                     id: `${i}-${Date.now()}`, // Temporary ID
                     originalLine: line,
                     description,
-                    completed,
+                    status: taskStatus,
                     lineNumber: i,
                     indentation,
                     children: [],

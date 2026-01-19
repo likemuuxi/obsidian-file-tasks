@@ -1399,3 +1399,20 @@
     margin-right: 4px;
     opacity: 0.7;
 }
+
+/* Cancelled Task Dimming */
+.task-item.is-cancelled {
+    opacity: 0.5;
+    color: var(--text-muted);
+    transition: opacity 0.2s ease;
+}
+
+.task-item.is-cancelled:hover {
+    opacity: 0.8;
+    /* Slight restore on hover for readability */
+}
+
+.preview-task-checkbox.is-cancelled {
+    color: var(--text-muted);
+    border-color: var(--text-muted);
+}

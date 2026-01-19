@@ -960,8 +960,9 @@ export class QuickAddModal extends Modal {
         let content = match[3];
 
         let status = 'todo';
-        if (statusChar === 'x') status = 'done';
+        if (statusChar === 'x' || statusChar === 'X') status = 'done';
         else if (statusChar === '/') status = 'doing';
+        else if (statusChar === '-') status = 'cancelled';
 
         // Indent
         const indentMatch = line.match(/^(\s*)/);
