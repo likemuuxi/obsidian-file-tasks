@@ -480,7 +480,7 @@
     justify-content: center;
     background-color: transparent;
     min-width: 80px;
-    border-left: 1px solid var(--background-modifier-border-hover);
+    border-left: 1px dashed var(--background-modifier-border-hover);
 }
 
 .memo-button-container {
@@ -521,7 +521,7 @@
 
 .task-preview-list,
 .task-quadrant-view,
-.task-weekly-view {
+.task-time-view {
     padding-top: 0px !important;
 }
 
@@ -696,18 +696,19 @@
     cursor: grabbing;
 }
 
-/* Weekly View */
-.task-weekly-view {
+/* Time View */
+.task-time-view {
     height: 100%;
+    padding: 10px;
     overflow-y: auto;
     overflow-x: hidden;
 }
 
-.weekly-group {
+.time-group {
     margin-bottom: 20px;
 }
 
-.weekly-group-header {
+.time-group-header {
     font-weight: 600;
     margin-bottom: 8px;
     padding-bottom: 4px;
@@ -715,13 +716,13 @@
     color: var(--text-accent);
 }
 
-.weekly-item {
+.time-task-item {
     padding: 6px 10px;
     border-bottom: 1px solid var(--background-modifier-border-hover);
     cursor: pointer;
 }
 
-.weekly-item:hover {
+.time-task-item:hover {
     background-color: var(--background-modifier-hover);
 }
 

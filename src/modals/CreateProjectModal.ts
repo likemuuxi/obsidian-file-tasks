@@ -70,10 +70,11 @@ export class CreateProjectModal extends Modal {
         // Create Header
         const frontmatter = `---
 project: true
-order: ${Date.now()}
-status: ${this.plugin.settings.defaultProjectStatus}
-defaultView: ${this.plugin.settings.defaultProjectView}
+pinned: false
+status: active
+defaultView: list
 ---
+
 # Tasks
 
 `;

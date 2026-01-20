@@ -5,7 +5,7 @@ import { FileAccess } from '../core/FileAccess';
 export interface ViewTask {
     line: string;
     lineNum: number;
-    status: string; // 'todo', 'doing', 'done'
+    status: string; // 'todo', 'doing', 'done', 'cancelled'
     content: string;
     dueDate?: string;
     startDate?: string;

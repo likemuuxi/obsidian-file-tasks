@@ -4,11 +4,12 @@ import { DateUtils } from '../utils/DateUtils';
 import { FileAccess } from '../core/FileAccess';
 import { CreateProjectModal } from './CreateProjectModal';
 import { CreateFolderModal } from './CreateFolderModal';
+import { RenameFolderModal } from './RenameFolderModal';
 import { RenameProjectModal } from './RenameProjectModal';
 import { TaskView, ViewTask } from '../views/BaseTaskView';
 import { TaskListView } from '../views/TaskListView';
 import { TaskKanbanView } from '../views/TaskKanbanView';
-import { TaskWeeklyView } from '../views/TaskWeeklyView';
+import { TaskTimeView } from '../views/TaskTimeView';
 import { TaskQuadrantView } from '../views/TaskQuadrantView';
 import { TaskMemoView } from '../views/TaskMemoView';
 import { moment } from 'obsidian';
@@ -48,7 +49,7 @@ export class QuickAddModal extends Modal {
     }
 
     // View State
-    currentViewType: 'list' | 'kanban' | 'quadrant' | 'week' | 'memo' = 'list';
+    currentViewType: 'list' | 'kanban' | 'quadrant' | 'time' | 'memo' = 'list';
     views: { [key: string]: TaskView } = {};
     showCompleted: boolean = true;
 
@@ -94,7 +95,7 @@ export class QuickAddModal extends Modal {
         if (file instanceof TFile) {
             const cache = this.app.metadataCache.getFileCache(file);
             const defaultView = cache?.frontmatter?.['defaultView'] || cache?.frontmatter?.['view'];
-            if (defaultView && ['list', 'kanban', 'quadrant', 'week', 'memo'].includes(defaultView)) {
+            if (defaultView && ['list', 'kanban', 'quadrant', 'time', 'memo'].includes(defaultView)) {
                 this.currentViewType = defaultView;
             }
         }
@@ -124,11 +125,12 @@ export class QuickAddModal extends Modal {
         this.renderContent(mainCol);
 
         // Add Tab key listener for view switching
-        // this.scope.register([], 'Tab', (evt) => {
-        //     evt.preventDefault();
-        //     this.switchToNextView();
-        //     return false;
-        // });
+        this.scope.register(['Shift'], 'Tab', (evt) => {
+            evt.preventDefault();
+            this.switchToNextView();
+            return false;
+        });
+
         // Global Click Listener for Resetting Selection
         this.contentEl.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
@@ -143,24 +145,24 @@ export class QuickAddModal extends Modal {
         });
     }
 
-    // switchToNextView() {
-    //     const views = ['list', 'kanban', 'quadrant', 'week'];
-    //     const currentIndex = views.indexOf(this.currentViewType);
-    //     const nextIndex = (currentIndex + 1) % views.length;
-    //     this.currentViewType = views[nextIndex] as any;
+    switchToNextView() {
+        const views = ['list', 'kanban', 'quadrant', 'time'];
+        const currentIndex = views.indexOf(this.currentViewType);
+        const nextIndex = (currentIndex + 1) % views.length;
+        this.currentViewType = views[nextIndex] as any;
 
-    //     // Update UI
-    //     this.updateTaskPreview();
-    //     const tabsContainer = this.contentEl.querySelector('.task-view-tabs');
-    //     if (tabsContainer) {
-    //         tabsContainer.querySelectorAll('.task-view-tab').forEach((el, idx) => {
-    //             el.removeClass('is-active');
-    //             if (idx === nextIndex) {
-    //                 el.addClass('is-active');
-    //             }
-    //         });
-    //     }
-    // }
+        // Update UI
+        this.updateTaskPreview();
+        const tabsContainer = this.contentEl.querySelector('.task-view-tabs');
+        if (tabsContainer) {
+            tabsContainer.querySelectorAll('.task-view-tab').forEach((el, idx) => {
+                el.removeClass('is-active');
+                if (idx === nextIndex) {
+                    el.addClass('is-active');
+                }
+            });
+        }
+    }
 
     renderSidebar(container: HTMLElement) {
         const leftCol = container.createDiv({ cls: 'quick-add-left' });
@@ -403,15 +405,9 @@ export class QuickAddModal extends Modal {
                 item.setTitle('Rename Folder')
                     .setIcon('pencil')
                     .onClick(() => {
-                        // Simple rename logic
-                        // Use RenameProjectModal logic but adapted or simple prompt?
-                        // Let's implement full Rename Modal for folders later or reuse valid logic
-                        // For now, simple fallback or none. User asked for "Create Folder", not explicitly rename.
-                        // But standard expectation.
-                        // Let's rely on Obsidian file explorer for advanced folder ops if needed, 
-                        // or implement RenameFolderModal.
-                        // Skip for now to keep scope small as per user request (focus on Create/Drag/Expand).
-                        new Notice("Rename via File Explorer for now.");
+                        new RenameFolderModal(this.app, folder, () => {
+                            this.refreshSidebar();
+                        }).open();
                     });
             });
 
@@ -499,7 +495,7 @@ export class QuickAddModal extends Modal {
                 const pinIcon = item.createDiv({ cls: 'project-item-pin-icon' });
                 setIcon(pinIcon, 'pin');
                 pinIcon.style.opacity = '0.7';
-                pinIcon.style.transform = 'scale(0.8)';
+                pinIcon.style.transform = 'scale(0.7)';
             }
         }
 
@@ -548,7 +544,6 @@ export class QuickAddModal extends Modal {
 
                                 await this.app.fileManager.processFrontMatter(file, (fm) => {
                                     fm['pinned'] = !isPinned;
-                                    delete fm['order'];
                                 });
                             }
                         });
@@ -576,16 +571,6 @@ export class QuickAddModal extends Modal {
                         });
                 });
 
-                // Status Submenu
-                menu.addItem((item) => {
-                    item.setTitle('Change Status')
-                        .setIcon('info')
-                        .setSubmenu()
-                        .addItem((sub) => sub.setTitle('Active').onClick(() => this.updateProjectStatus(path, 'active')))
-                        .addItem((sub) => sub.setTitle('Paused').onClick(() => this.updateProjectStatus(path, 'paused')))
-                        .addItem((sub) => sub.setTitle('Archived').onClick(() => this.updateProjectStatus(path, 'archived')));
-                });
-
                 // Default View Submenu
                 menu.addItem((item) => {
                     item.setTitle('Default View')
@@ -594,7 +579,17 @@ export class QuickAddModal extends Modal {
                         .addItem((sub) => sub.setTitle('List').onClick(() => this.updateProjectView(path, 'list')))
                         .addItem((sub) => sub.setTitle('Kanban').onClick(() => this.updateProjectView(path, 'kanban')))
                         .addItem((sub) => sub.setTitle('Quadrant').onClick(() => this.updateProjectView(path, 'quadrant')))
-                        .addItem((sub) => sub.setTitle('Week').onClick(() => this.updateProjectView(path, 'week')));
+                        .addItem((sub) => sub.setTitle('Time').onClick(() => this.updateProjectView(path, 'time')));
+                });
+
+                // Status Submenu
+                menu.addItem((item) => {
+                    item.setTitle('Change Status')
+                        .setIcon('info')
+                        .setSubmenu()
+                        .addItem((sub) => sub.setTitle('Active').onClick(() => this.updateProjectStatus(path, 'active')))
+                        .addItem((sub) => sub.setTitle('Paused').onClick(() => this.updateProjectStatus(path, 'paused')))
+                        .addItem((sub) => sub.setTitle('Archived').onClick(() => this.updateProjectStatus(path, 'archived')));
                 });
 
                 menu.addSeparator();
@@ -796,7 +791,7 @@ export class QuickAddModal extends Modal {
             'list': new TaskListView(this.app, this, this.taskPreviewContainer),
             'kanban': new TaskKanbanView(this.app, this, this.taskPreviewContainer),
             'quadrant': new TaskQuadrantView(this.app, this, this.taskPreviewContainer),
-            'week': new TaskWeeklyView(this.app, this, this.taskPreviewContainer),
+            'time': new TaskTimeView(this.app, this, this.taskPreviewContainer),
             'memo': new TaskMemoView(this.app, this, this.taskPreviewContainer)
         };
 
@@ -826,7 +821,7 @@ export class QuickAddModal extends Modal {
             { id: 'list', icon: 'list', title: 'List' },
             { id: 'kanban', icon: 'columns', title: 'Kanban' },
             { id: 'quadrant', icon: 'grid', title: 'Quadrant' },
-            { id: 'week', icon: 'calendar', title: 'Week' }
+            { id: 'time', icon: 'calendar', title: 'Time' }
         ];
 
         views.forEach(v => {
@@ -861,7 +856,7 @@ export class QuickAddModal extends Modal {
                 const viewId = title === 'List' ? 'list' :
                     title === 'Kanban' ? 'kanban' :
                         title === 'Quadrant' ? 'quadrant' :
-                            title === 'Week' ? 'week' : null;
+                            title === 'Time' ? 'time' : null;
 
                 if (viewId === this.currentViewType) {
                     tab.addClass('is-active');

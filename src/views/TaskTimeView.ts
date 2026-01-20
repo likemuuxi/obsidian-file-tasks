@@ -4,11 +4,11 @@ import { TaskItem } from '../components/TaskItem';
 import { TaskTreeUtils } from '../utils/TaskTreeUtils';
 import * as moment from 'moment';
 
-export class TaskWeeklyView extends TaskView {
+export class TaskTimeView extends TaskView {
 
     render(tasks: ViewTask[], file: TFile) {
         this.clear();
-        this.container.addClass('task-weekly-view');
+        this.container.addClass('task-time-view');
 
         // Group by Date (Due > Scheduled > Start)
         const groups: Record<string, ViewTask[]> = {};
@@ -28,28 +28,28 @@ export class TaskWeeklyView extends TaskView {
         const sortedDates = Object.keys(groups).sort();
 
         sortedDates.forEach(date => {
-            const groupDiv = this.container.createDiv({ cls: 'weekly-group' });
-            groupDiv.createDiv({ cls: 'weekly-group-header', text: date });
+            const groupDiv = this.container.createDiv({ cls: 'time-group' });
+            groupDiv.createDiv({ cls: 'time-group-header', text: date });
 
             const roots = TaskTreeUtils.buildTree(groups[date]);
             roots.forEach(t => {
                 new TaskItem(t, this.modal, file, {
                     showIndent: false,
                     showCheckbox: true,
-                    className: 'weekly-task-item'
+                    className: 'time-task-item'
                 }).render(groupDiv);
             });
         });
 
         if (noDate.length > 0) {
-            const groupDiv = this.container.createDiv({ cls: 'weekly-group' });
-            groupDiv.createDiv({ cls: 'weekly-group-header', text: 'No Date' });
+            const groupDiv = this.container.createDiv({ cls: 'time-group' });
+            groupDiv.createDiv({ cls: 'time-group-header', text: 'No Date' });
             const roots = TaskTreeUtils.buildTree(noDate);
             roots.forEach(t => {
                 new TaskItem(t, this.modal, file, {
                     showIndent: false,
                     showCheckbox: true,
-                    className: 'weekly-task-item'
+                    className: 'time-task-item'
                 }).render(groupDiv);
             });
         }
