@@ -1353,7 +1353,7 @@ export class QuickAddModal extends Modal {
         const timestamp = moment().format('YYYY-MM-DD HH:mm:ss');
         const memoLine = `- [${timestamp}] ${this.description}`;
 
-        // We need to append this to the file, specifically after "# Memo" header.
+        // We need to append this to the file, specifically after "# Memos" header.
         await this.fileAccess.appendMemo(file, memoLine);
 
         // Clear and Refresh
@@ -1585,12 +1585,12 @@ export class QuickAddModal extends Modal {
                         await this.fileAccess.appendTask(file, taskLine);
                     }
                 } else {
-                    // Check for # Memo to insert BEFORE
+                    // Check for # Memos to insert BEFORE
                     const content = await this.app.vault.read(file);
                     const lines = content.split('\n');
                     let memoLineIndex = -1;
                     for (let i = 0; i < lines.length; i++) {
-                        if (lines[i].trim() === '# Memo') {
+                        if (lines[i].trim() === '# Memos') {
                             memoLineIndex = i;
                             break;
                         }

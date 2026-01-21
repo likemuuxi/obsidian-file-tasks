@@ -488,22 +488,22 @@ export class FileAccess {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
 
-        // Find "# Memo" line
-        const memoIndex = lines.findIndex(l => l.trim() === '# Memo');
+        // Find "# Memos" line
+        const memoIndex = lines.findIndex(l => l.trim() === '# Memos');
 
         let newContent = '';
         if (memoIndex !== -1) {
-            // Insert after # Memo header
+            // Insert after # Memos header
             lines.splice(memoIndex + 1, 0, memoLine);
             newContent = lines.join('\n');
         } else {
-            // Append # Memo and content at the end if not exists?
-            // User requirement: "Memos are always added below # Memo".
+            // Append # Memos and content at the end if not exists?
+            // User requirement: "Memos are always added below # Memos".
             // If it doesn't exist, Create it.
             if (lines[lines.length - 1].trim() !== '') {
                 lines.push('');
             }
-            lines.push('# Memo');
+            lines.push('# Memos');
             lines.push('\n');
             lines.push(memoLine);
             newContent = lines.join('\n');
@@ -570,14 +570,34 @@ export class FileAccess {
         sourceLines.splice(lineNum, sourceEnd - lineNum + 1);
         await this.app.vault.modify(sourceFile, sourceLines.join('\n'));
 
-        // 3. Append to Target
+        // 3. Append/Insert to Target
         const targetContent = await this.app.vault.read(targetFile);
-        // Ensure separation
-        const newTargetContent = targetContent.endsWith('\n') ?
-            targetContent + block.join('\n') :
-            targetContent + '\n' + block.join('\n');
+        const targetLines = targetContent.split('\n');
 
-        await this.app.vault.modify(targetFile, newTargetContent);
+        // Check for # Memo or # Memos header to insert BEFORE
+        // We want to put it at the end of the Task section, which is effectively before the Memo section.
+        const memoIndex = targetLines.findIndex(l => l.trim() === '# Memos');
+
+        if (memoIndex !== -1) {
+            // Insert before Memo header
+            // Ensure there is a blank line before Memo header if we are inserting right up against it?
+            // Actually, just splicing it in at memoIndex shifts memo down.
+            // We might want to ensure a newline after the block if the memo header is right there.
+
+            // If the line before memoIndex is not empty, maybe add spacing? 
+            // For now, simple insertion.
+            targetLines.splice(memoIndex, 0, ...block);
+            // If the block didn't end with a newline (it's array of strings), it's fine.
+            // But if the previous line was non-empty and we insert, it's fine.
+
+            await this.app.vault.modify(targetFile, targetLines.join('\n'));
+        } else {
+            // Append to end (existing behavior)
+            const newTargetContent = targetContent.endsWith('\n') ?
+                targetContent + block.join('\n') :
+                targetContent + '\n' + block.join('\n');
+            await this.app.vault.modify(targetFile, newTargetContent);
+        }
     }
 
     async getIncompleteTaskCount(file: TFile): Promise<number> {
@@ -651,7 +671,7 @@ export class FileAccess {
         let memoSectionFound = false;
 
         for (const line of lines) {
-            if (line.trim() === '# Memo') {
+            if (line.trim() === '# Memos') {
                 memoSectionFound = true;
                 continue;
             }

@@ -9,7 +9,7 @@ export class TaskMemoView extends TaskView {
 
         // We need to read the file content directly to find the Memos, 
         // as `tasks` passed here are parsed tasks (checkboxes).
-        // Memos are simple list items `- ` under `# Memo` header.
+        // Memos are simple list items `- ` under `# Memos` header.
         this.renderMemos(file);
     }
 
@@ -23,7 +23,7 @@ export class TaskMemoView extends TaskView {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
 
-            if (line.trim() === '# Memo') {
+            if (line.trim() === '# Memos') {
                 memoSectionFound = true;
                 continue;
             }
