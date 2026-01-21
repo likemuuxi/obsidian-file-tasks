@@ -1,4 +1,4 @@
-import { setIcon, TFile, MarkdownRenderer, moment } from 'obsidian';
+import { setIcon, TFile, MarkdownRenderer, moment, Menu } from 'obsidian';
 import { ViewTask } from '../views/BaseTaskView';
 import { QuickAddModal } from '../modals/QuickAddModal';
 import { DateUtils } from '../utils/DateUtils';
@@ -163,6 +163,32 @@ export class TaskItem {
             this.modal.selectedParentTaskContent = null;
             this.modal.loadTaskForEditing(this.task.originalLine, this.task.lineNum);
         };
+
+        // Context Menu (Jump to File)
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const menu = new Menu();
+            menu.addItem((menuItem) => {
+                menuItem
+                    .setTitle('Jump to File')
+                    .setIcon('forward') // or external-link
+                    .onClick(async () => {
+                        this.modal.close();
+                        const leaf = this.modal.app.workspace.getLeaf(false);
+                        if (leaf) {
+                            await (leaf as any).openFile(this.file, {
+                                eState: {
+                                    line: this.task.lineNum,
+                                    mode: "source"
+                                }
+                            });
+                        }
+                    });
+            });
+            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+        });
 
         const row = item.createDiv({ cls: 'preview-task-row' });
         row.style.position = 'relative';

@@ -467,7 +467,7 @@ export class QuickAddModal extends Modal {
             const menu = new Menu();
 
             menu.addItem((item) => {
-                item.setTitle('New Project Here')
+                item.setTitle('New Project')
                     .setIcon('plus')
                     .onClick(() => {
                         new CreateProjectModal(this.app, this.plugin, folder.path, () => {
@@ -477,7 +477,7 @@ export class QuickAddModal extends Modal {
             });
 
             menu.addItem((item) => {
-                item.setTitle('New Folder Here')
+                item.setTitle('New Folder')
                     .setIcon('folder-plus')
                     .onClick(() => {
                         new CreateFolderModal(this.app, this.plugin, folder.path, () => {
@@ -487,7 +487,7 @@ export class QuickAddModal extends Modal {
             });
 
             menu.addItem((item) => {
-                item.setTitle('Rename Folder')
+                item.setTitle('Rename')
                     .setIcon('pencil')
                     .onClick(() => {
                         new RenameFolderModal(this.app, folder, () => {
@@ -670,8 +670,31 @@ export class QuickAddModal extends Modal {
                         });
                 });
 
+                // Default View Submenu
                 menu.addItem((item) => {
-                    item.setTitle('Rename Project')
+                    item.setTitle('Default View')
+                        .setIcon('layout')
+                        .setSubmenu()
+                        .addItem((sub) => sub.setTitle('List').onClick(() => this.updateProjectView(path, 'list')))
+                        .addItem((sub) => sub.setTitle('Kanban').onClick(() => this.updateProjectView(path, 'kanban')))
+                        .addItem((sub) => sub.setTitle('Quadrant').onClick(() => this.updateProjectView(path, 'quadrant')))
+                        .addItem((sub) => sub.setTitle('Time').onClick(() => this.updateProjectView(path, 'time')));
+                });
+
+                // Status Submenu
+                menu.addItem((item) => {
+                    item.setTitle('Change Status')
+                        .setIcon('info')
+                        .setSubmenu()
+                        .addItem((sub) => sub.setTitle('Active').onClick(() => this.updateProjectStatus(path, 'active')))
+                        .addItem((sub) => sub.setTitle('Paused').onClick(() => this.updateProjectStatus(path, 'paused')))
+                        .addItem((sub) => sub.setTitle('Archived').onClick(() => this.updateProjectStatus(path, 'archived')));
+                });
+
+                menu.addSeparator();
+
+                menu.addItem((item) => {
+                    item.setTitle('Rename')
                         .setIcon('pencil')
                         .onClick(() => {
                             const file = this.app.vault.getAbstractFileByPath(path);
@@ -692,25 +715,17 @@ export class QuickAddModal extends Modal {
                         });
                 });
 
-                // Default View Submenu
+                // Jump to File
                 menu.addItem((item) => {
-                    item.setTitle('Default View')
-                        .setIcon('layout')
-                        .setSubmenu()
-                        .addItem((sub) => sub.setTitle('List').onClick(() => this.updateProjectView(path, 'list')))
-                        .addItem((sub) => sub.setTitle('Kanban').onClick(() => this.updateProjectView(path, 'kanban')))
-                        .addItem((sub) => sub.setTitle('Quadrant').onClick(() => this.updateProjectView(path, 'quadrant')))
-                        .addItem((sub) => sub.setTitle('Time').onClick(() => this.updateProjectView(path, 'time')));
-                });
-
-                // Status Submenu
-                menu.addItem((item) => {
-                    item.setTitle('Change Status')
-                        .setIcon('info')
-                        .setSubmenu()
-                        .addItem((sub) => sub.setTitle('Active').onClick(() => this.updateProjectStatus(path, 'active')))
-                        .addItem((sub) => sub.setTitle('Paused').onClick(() => this.updateProjectStatus(path, 'paused')))
-                        .addItem((sub) => sub.setTitle('Archived').onClick(() => this.updateProjectStatus(path, 'archived')));
+                    item.setTitle('Jump to File')
+                        .setIcon('forward')
+                        .onClick(async () => {
+                            const file = this.app.vault.getAbstractFileByPath(path);
+                            if (file instanceof TFile) {
+                                this.close();
+                                await this.app.workspace.getLeaf(false).openFile(file);
+                            }
+                        });
                 });
 
                 menu.addSeparator();
@@ -737,14 +752,6 @@ export class QuickAddModal extends Modal {
 
             menu.showAtMouseEvent(event);
         });
-
-        item.ondblclick = async () => {
-            const file = this.app.vault.getAbstractFileByPath(path);
-            if (file instanceof TFile) {
-                await this.app.workspace.getLeaf(false).openFile(file);
-                this.close();
-            }
-        };
     }
 
     async handleItemMove(draggedPath: string, targetPath: string) {

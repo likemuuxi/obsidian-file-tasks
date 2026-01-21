@@ -162,6 +162,32 @@ export class TaskMemoView extends TaskView {
                     item.addClass('is-expanded');
                 }
             });
+
+            // Context Menu (Jump to File)
+            item.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const menu = new Menu();
+                menu.addItem((menuItem) => {
+                    menuItem
+                        .setTitle('Jump to File')
+                        .setIcon('forward')
+                        .onClick(async () => {
+                            if (this.modal) this.modal.close();
+                            const leaf = this.app.workspace.getLeaf(false);
+                            if (leaf) {
+                                await (leaf as any).openFile(file, {
+                                    eState: {
+                                        line: startLine,
+                                        mode: "source"
+                                    }
+                                });
+                            }
+                        });
+                });
+                menu.showAtPosition({ x: e.pageX, y: e.pageY });
+            });
         }
     }
 }
