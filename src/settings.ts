@@ -11,6 +11,8 @@ export interface FileTasksSettings {
     customDefaultProject: string; // New setting
     autoDateManagement: boolean;
     showMascot: boolean;
+    rememberLastOpenedProject: boolean;
+    lastOpenedProject: string;
 }
 
 export const DEFAULT_SETTINGS: FileTasksSettings = {
@@ -22,7 +24,9 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     defaultShowCompleted: true,
     customDefaultProject: '',
     autoDateManagement: false,
-    showMascot: true
+    showMascot: true,
+    rememberLastOpenedProject: true,
+    lastOpenedProject: ''
 }
 
 export class FileTasksSettingTab extends PluginSettingTab {
@@ -71,6 +75,16 @@ export class FileTasksSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.closeWindowOnTaskAdd)
                 .onChange(async (value) => {
                     this.plugin.settings.closeWindowOnTaskAdd = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Remember Last Opened Project')
+            .setDesc('If enabled, the Quick Add window will always open the project you were last viewing, ignoring the default project setting.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.rememberLastOpenedProject)
+                .onChange(async (value) => {
+                    this.plugin.settings.rememberLastOpenedProject = value;
                     await this.plugin.saveSettings();
                 }));
 

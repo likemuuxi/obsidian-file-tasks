@@ -60,9 +60,18 @@ export class QuickAddModal extends Modal {
         this.showCompleted = this.plugin.settings.defaultShowCompleted;
 
         // Defaults
-        // 1. Priority: Custom Default Project setting
+        // 0. Priority: Remember Last Opened Project
         let foundSpecificTarget = false;
-        if (this.plugin.settings.customDefaultProject) {
+        if (this.plugin.settings.rememberLastOpenedProject && this.plugin.settings.lastOpenedProject) {
+            const file = this.app.vault.getAbstractFileByPath(this.plugin.settings.lastOpenedProject);
+            if (file instanceof TFile) {
+                this.targetFile = file.path;
+                foundSpecificTarget = true;
+            }
+        }
+
+        // 1. Priority: Custom Default Project setting
+        if (!foundSpecificTarget && this.plugin.settings.customDefaultProject) {
             const file = this.app.vault.getAbstractFileByPath(this.plugin.settings.customDefaultProject);
             if (file instanceof TFile) {
                 this.targetFile = file.path;
@@ -620,13 +629,19 @@ export class QuickAddModal extends Modal {
             }
         }
 
-        item.onclick = () => {
+        item.onclick = async () => {
             this.targetFile = path;
             // Clear active from all items in sidebar (re-querying simplistic but effective)
             // Note: Since tree structure, we might have multiple .project-list containers if recursive? 
             // No, .project-item is class.
             this.modalEl.querySelectorAll('.project-item').forEach(el => el.removeClass('is-active'));
             item.addClass('is-active');
+
+            // Save as Last Opened if enabled
+            if (this.plugin.settings.rememberLastOpenedProject) {
+                this.plugin.settings.lastOpenedProject = path;
+                await this.plugin.saveSettings();
+            }
 
             // View Switching Logic based on frontmatter
             this.checkAndApplyDefaultView(path);
@@ -639,16 +654,22 @@ export class QuickAddModal extends Modal {
             event.preventDefault();
             const menu = new Menu();
 
+            // Jump to File (Already added)
+            // ...
+
             // Set as Default Open Project (Available for ALL items including Inbox)
-            menu.addItem((item) => {
-                item.setTitle('Set as Default Open Project')
-                    .setIcon('star')
-                    .onClick(async () => {
-                        this.plugin.settings.customDefaultProject = path;
-                        await this.plugin.saveSettings();
-                        new Notice(`Project "${name}" set as default open project`);
-                    });
-            });
+            // HIDE this option if "Remember Last Opened Project" is enabled, to avoid confusion.
+            if (!this.plugin.settings.rememberLastOpenedProject) {
+                menu.addItem((item) => {
+                    item.setTitle('Set as Default Open Project')
+                        .setIcon('star')
+                        .onClick(async () => {
+                            this.plugin.settings.customDefaultProject = path;
+                            await this.plugin.saveSettings();
+                            new Notice(`Project "${name}" set as default open project`);
+                        });
+                });
+            }
 
             if (!isDefault) {
                 // Pin/Unpin
