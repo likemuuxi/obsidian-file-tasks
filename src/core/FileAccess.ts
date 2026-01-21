@@ -570,6 +570,18 @@ export class FileAccess {
         sourceLines.splice(lineNum, sourceEnd - lineNum + 1);
         await this.app.vault.modify(sourceFile, sourceLines.join('\n'));
 
+        // Re-indent for Target (Strip base indentation to make it root)
+        if (block.length > 0) {
+            const baseIndent = this.getIndentStr(block[0]);
+            if (baseIndent.length > 0) {
+                for (let i = 0; i < block.length; i++) {
+                    if (block[i].startsWith(baseIndent)) {
+                        block[i] = block[i].substring(baseIndent.length);
+                    }
+                }
+            }
+        }
+
         // 3. Append/Insert to Target
         const targetContent = await this.app.vault.read(targetFile);
         const targetLines = targetContent.split('\n');

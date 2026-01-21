@@ -171,7 +171,7 @@ export class TaskMemoView extends TaskView {
                 const menu = new Menu();
                 menu.addItem((menuItem) => {
                     menuItem
-                        .setTitle('Jump to File')
+                        .setTitle('Jump to Memo')
                         .setIcon('forward')
                         .onClick(async () => {
                             if (this.modal) this.modal.close();

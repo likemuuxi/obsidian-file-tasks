@@ -233,6 +233,43 @@ export class QuickAddModal extends Modal {
         };
     }
 
+    refreshProjectTaskCounts() {
+        const projectItems = this.contentEl.querySelectorAll('.project-item');
+        projectItems.forEach(async (item: HTMLElement) => {
+            const path = item.dataset.path;
+            if (!path) return;
+
+            const file = this.app.vault.getAbstractFileByPath(path);
+            if (file instanceof TFile) {
+                const count = await this.fileAccess.getIncompleteTaskCount(file);
+                const countBadge = item.querySelector('.project-item-count') as HTMLElement;
+                if (countBadge) {
+                    if (count > 0) {
+                        countBadge.setText(count.toString());
+                        countBadge.style.display = 'block';
+                    } else {
+                        countBadge.style.display = 'none';
+                    }
+                } else if (count > 0) {
+                    // If badge doesn't exist but we have count (e.g. was hidden/not created), create it?
+                    // Relying on existing structure 'project-item-meta' to inject if missing might be safer if we want robustness,
+                    // but typically it's created but hidden.
+                    // Let's assume structure exists. If deeply not created, we can skip for now or append.
+                    const metaContainer = item.querySelector('.project-item-meta');
+                    if (metaContainer) {
+                        // Insert before pin if exists, or just append.
+                        const newBadge = metaContainer.createDiv({ cls: 'project-item-count' });
+                        newBadge.setText(count.toString());
+                        newBadge.style.display = 'block';
+                        // Re-order if needed? Pin usually is last.
+                        const pin = metaContainer.querySelector('.project-item-pin-icon');
+                        if (pin) metaContainer.insertBefore(newBadge, pin);
+                    }
+                }
+            }
+        });
+    }
+
     refreshSidebar(projectsOverride?: TFile[]) {
         const container = this.contentEl.querySelector('.quick-add-container');
         if (container) {
@@ -505,6 +542,18 @@ export class QuickAddModal extends Modal {
                     });
             });
 
+            menu.addSeparator();
+
+            menu.addItem((item) => {
+                item.setTitle('Delete')
+                    .setIcon('trash')
+                    .setWarning(true)
+                    .onClick(async () => {
+                        await this.app.vault.trash(folder, true);
+                        this.refreshSidebar();
+                    });
+            });
+
             menu.showAtMouseEvent(event);
         });
 
@@ -538,11 +587,11 @@ export class QuickAddModal extends Modal {
 
     createProjectItem(container: HTMLElement, name: string, path: string, isDefault: boolean) {
         const item = container.createDiv({ cls: 'project-item' });
+        item.dataset.path = path;
 
         // Make draggable (for moving to another folder)
         if (!isDefault) {
             item.draggable = true;
-            item.dataset.path = path;
 
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer?.setData('text/plain', path);
@@ -581,6 +630,7 @@ export class QuickAddModal extends Modal {
                     if (targetFile instanceof TFile) {
                         await this.fileAccess.moveTaskToProject(sourceFile, targetFile, lineNum);
                         await this.updateTaskPreview();
+                        this.refreshProjectTaskCounts();
                         new Notice(`Moved task to ${name}`);
                     }
                 }

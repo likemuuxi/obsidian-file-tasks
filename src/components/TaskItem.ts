@@ -172,7 +172,7 @@ export class TaskItem {
             const menu = new Menu();
             menu.addItem((menuItem) => {
                 menuItem
-                    .setTitle('Jump to File')
+                    .setTitle('Jump to Task')
                     .setIcon('forward') // or external-link
                     .onClick(async () => {
                         this.modal.close();
