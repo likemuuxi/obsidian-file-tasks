@@ -1236,7 +1236,6 @@
 
 .memo-action-btn.delete-btn:hover {
     color: var(--text-error);
-    background-color: var(--background-modifier-error);
 }
 
 /* Modal Styles */
@@ -1246,7 +1245,6 @@
     gap: 10px;
     margin-top: 15px;
 }
-
 
 /* Menu Wrapper Logic */
 .task-menu-wrapper {
