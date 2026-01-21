@@ -339,6 +339,91 @@ export class QuickAddModal extends Modal {
         });
     }
 
+    renderMascot(container: HTMLElement, targetFile?: TFile) {
+        // ... (container setup same as before) ...
+        // Check if wrapper already exists
+        let wrapper = container.querySelector('.mascot-wrapper') as HTMLElement;
+        let progressBar: HTMLElement;
+        let emojiEl: HTMLElement;
+        let textEl: HTMLElement;
+
+        if (!wrapper) {
+            wrapper = container.createDiv({ cls: 'mascot-wrapper' });
+            progressBar = wrapper.createDiv({ cls: 'mascot-progress-bar' });
+            emojiEl = wrapper.createDiv({ cls: 'mascot-emoji' });
+            textEl = wrapper.createDiv({ cls: 'mascot-text' });
+        } else {
+            progressBar = wrapper.querySelector('.mascot-progress-bar') as HTMLElement;
+            emojiEl = wrapper.querySelector('.mascot-emoji') as HTMLElement;
+            textEl = wrapper.querySelector('.mascot-text') as HTMLElement;
+        }
+
+        // Project Target: Single File or Filtered List?
+        // User requested "single project progress".
+        let specificFiles: TFile[] | undefined = undefined;
+        if (targetFile) {
+            specificFiles = [targetFile];
+        } else {
+            // Fallback to filtered list if no specific file provided (e.g. initial load or something)
+            // But usually we have a targetFile in QuickAddModal.
+            // If strictly per project, we should pass it.
+            specificFiles = this.getProjects(); // Or empty? 
+        }
+
+        // Actually, if we are in "Inbox" or a specific file, targetFile is set.
+        // getGlobalCompletionStats accepts Array.
+
+        this.fileAccess.getCompletionStats(this.plugin.settings.taskDirectory, specificFiles).then(stats => {
+            const { rate, incomplete } = stats;
+            let emoji = '🥳';
+            let message = 'All Clear!';
+
+            // Logic based on Incomplete Count
+            // 0 -> Party
+            // < 5 -> Happy
+            // < 10 -> Thinking
+            // < 20 -> Worried
+            // >= 20 -> Dizzy
+
+            if (incomplete > 0) {
+                if (incomplete < 5) {
+                    emoji = '😄';
+                    message = 'Good Pace';
+                } else if (incomplete < 10) {
+                    emoji = '🤔';
+                    message = 'Making Progress';
+                } else if (incomplete < 20) {
+                    emoji = '😟';
+                    message = 'Getting Busy';
+                } else {
+                    emoji = '😵';
+                    message = 'Swamped!';
+                }
+            } else if (stats.total > 0 && incomplete === 0) {
+                emoji = '🥳';
+                message = 'All Done!';
+            } else if (stats.total === 0) {
+                emoji = '😴';
+                message = 'No Tasks';
+            }
+
+            // Calculate Completion % (1 - Incomplete Ratio)
+            let completionPercent = 0;
+            if (stats.total > 0) {
+                completionPercent = Math.round((1 - (incomplete / stats.total)) * 100);
+            }
+
+            if (emojiEl) emojiEl.setText(emoji);
+            if (textEl) textEl.setText(`${message} (${incomplete} Left)`);
+            wrapper.setAttribute('title', `${incomplete} incomplete / ${stats.total} total`);
+
+            // Set Progress Bar Width
+            if (progressBar) progressBar.style.width = `${completionPercent}%`;
+        }).catch(err => {
+            console.error('Failed to render mascot stats', err);
+        });
+    }
+
     createFolderItem(container: HTMLElement, folder: TFolder) {
         // Wrapper for Folder + Children
         const folderWrapper = container.createDiv({ cls: 'project-folder-wrapper' });
@@ -414,19 +499,22 @@ export class QuickAddModal extends Modal {
             menu.showAtMouseEvent(event);
         });
 
-        // Folder Drag & Drop (as Target)
+        // Folder Drag & Drop (as Target for Projects)
         header.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            header.addClass('sortable-drag-over');
+            // Only accept files (text/plain path), not tasks
+            if (e.dataTransfer?.types.includes('text/plain') && !e.dataTransfer.types.includes('application/obsidian-task')) {
+                e.preventDefault();
+                header.addClass('folder-drag-over');
+            }
         });
 
         header.addEventListener('dragleave', (e) => {
-            header.removeClass('sortable-drag-over');
+            header.removeClass('folder-drag-over');
         });
 
         header.addEventListener('drop', async (e) => {
             e.preventDefault();
-            header.removeClass('sortable-drag-over');
+            header.removeClass('folder-drag-over');
             const draggedPath = e.dataTransfer?.getData('text/plain');
             if (draggedPath) {
                 await this.handleItemMove(draggedPath, folder.path);
@@ -442,41 +530,54 @@ export class QuickAddModal extends Modal {
     createProjectItem(container: HTMLElement, name: string, path: string, isDefault: boolean) {
         const item = container.createDiv({ cls: 'project-item' });
 
-        // Make draggable if not Inbox (default)
+        // Make draggable (for moving to another folder)
         if (!isDefault) {
             item.draggable = true;
             item.dataset.path = path;
 
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer?.setData('text/plain', path);
-                item.addClass('sortable-ghost');
+                item.addClass('sortable-ghost'); // Optional visual
             });
 
             item.addEventListener('dragend', () => {
                 item.removeClass('sortable-ghost');
-                container.querySelectorAll('.project-item').forEach(el => el.removeClass('sortable-drag-over'));
-                container.querySelectorAll('.project-folder-header').forEach(el => el.removeClass('sortable-drag-over'));
-            });
-
-            item.addEventListener('dragover', (e) => {
-                e.preventDefault(); // Allow drop
-                item.addClass('sortable-drag-over');
-            });
-
-            item.addEventListener('dragleave', (e) => {
-                item.removeClass('sortable-drag-over');
-            });
-
-
-            item.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                item.removeClass('sortable-drag-over');
-                const draggedPath = e.dataTransfer?.getData('text/plain');
-                if (draggedPath && draggedPath !== path) {
-                    await this.handleItemMove(draggedPath, path);
-                }
             });
         }
+
+        // Drop Targets (Task Moving)
+        item.addEventListener('dragover', (e) => {
+            // Check if dragging a task
+            if (e.dataTransfer?.types.includes('application/obsidian-task')) {
+                e.preventDefault(); // Allow drop
+                item.addClass('task-drag-over');
+            }
+        });
+
+        item.addEventListener('dragleave', (e) => {
+            item.removeClass('task-drag-over');
+        });
+
+        item.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            item.removeClass('task-drag-over');
+
+            // 1. Task Drop (from Task List)
+            const taskLineStr = e.dataTransfer?.getData('application/obsidian-task');
+            if (taskLineStr) {
+                const lineNum = parseInt(taskLineStr);
+                const sourceFile = this.app.vault.getAbstractFileByPath(this.targetFile);
+                if (sourceFile instanceof TFile && sourceFile.path !== path) {
+                    const targetFile = this.app.vault.getAbstractFileByPath(path);
+                    if (targetFile instanceof TFile) {
+                        await this.fileAccess.moveTaskToProject(sourceFile, targetFile, lineNum);
+                        await this.updateTaskPreview();
+                        new Notice(`Moved task to ${name}`);
+                    }
+                }
+                return;
+            }
+        });
 
         if (isDefault) {
             item.addClass('is-default');
@@ -488,11 +589,31 @@ export class QuickAddModal extends Modal {
 
         const label = item.createSpan({ text: name });
 
-        // Add Pin Icon if pinned
+        // Metadata Container (Rightsde: Count + Pin)
+        const metaContainer = item.createDiv({ cls: 'project-item-meta' });
+        metaContainer.style.display = 'flex';
+        metaContainer.style.alignItems = 'center';
+        metaContainer.style.gap = '6px';
+
         const file = this.app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile) {
+            // Task Count (Positioned before Pin)
+            // Hide for Default Project
+            if (!isDefault) {
+                const countBadge = metaContainer.createDiv({ cls: 'project-item-count' });
+                countBadge.style.display = 'none'; // Hidden by default
+
+                this.fileAccess.getIncompleteTaskCount(file).then(count => {
+                    if (count > 0) {
+                        countBadge.setText(count.toString());
+                        countBadge.style.display = 'block';
+                    }
+                });
+            }
+
+            // Pin Icon (Positioned after Count)
             if (this.isPinned(file)) {
-                const pinIcon = item.createDiv({ cls: 'project-item-pin-icon' });
+                const pinIcon = metaContainer.createDiv({ cls: 'project-item-pin-icon' });
                 setIcon(pinIcon, 'pin');
                 pinIcon.style.opacity = '0.7';
                 pinIcon.style.transform = 'scale(0.7)';
@@ -726,6 +847,11 @@ export class QuickAddModal extends Modal {
                 this.refreshInputSection();
             };
 
+            // Mascot Section in Header
+            if (this.plugin.settings.showMascot) {
+                const mascotContainer = header.createDiv({ cls: 'task-view-tabs helper-mascot-container' });
+            }
+
             // Show Completed Toggle
             const toggleBtn = header.createDiv({ cls: 'task-view-tab show-completed-toggle' });
             toggleBtn.style.marginLeft = 'auto'; // Push to right
@@ -897,7 +1023,24 @@ export class QuickAddModal extends Modal {
             file = files.find(f => f.path === this.targetFile || f.basename === this.targetFile) || null;
         }
 
+        // Refresh Mascot Logic (Now using specific file)
+        const mascotContainer = this.contentEl.querySelector('.helper-mascot-container') as HTMLElement;
+        if (mascotContainer) {
+            // Do NOT empty. renderMascot handles updates to existing DOM.
+            this.renderMascot(mascotContainer, (file instanceof TFile) ? file : undefined);
+        }
+
         if (file instanceof TFile) {
+            // Update Memo Count
+            // We do this here because updateTaskPreview is called on changes/switches.
+            // Find memo button
+            const memoBtn = this.contentEl.querySelector('.memo-tab-btn span');
+            if (memoBtn) {
+                this.fileAccess.getMemoCount(file).then(count => {
+                    memoBtn.setText(count > 0 ? `Memo (${count})` : 'Memo');
+                });
+            }
+
             const content = await this.app.vault.read(file);
             const lines = content.split('\n');
             const tasks: ViewTask[] = [];

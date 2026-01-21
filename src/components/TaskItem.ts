@@ -44,7 +44,10 @@ export class TaskItem {
 
             item.ondragstart = (e) => {
                 if (e.dataTransfer) {
+                    // For reordering (internal)
                     e.dataTransfer.setData('text/plain', this.task.lineNum.toString());
+                    // For moving to other projects (cross-component)
+                    e.dataTransfer.setData('application/obsidian-task', this.task.lineNum.toString());
                     e.dataTransfer.effectAllowed = 'move';
                 }
             };

@@ -125,7 +125,9 @@ export class TaskMemoView extends TaskView {
                     }
 
                     await this.fileAccess.replaceMemoLines(file, startLine, endLine, newFullContent);
-                    this.render(this.tasks, file); // Refresh
+                    // Refresh global preview to update counts
+                    if (this.modal) this.modal.updateTaskPreview();
+                    else this.render(this.tasks, file);
                 }).open();
             };
 
@@ -135,7 +137,9 @@ export class TaskMemoView extends TaskView {
             deleteBtn.onclick = async (e) => {
                 e.stopPropagation();
                 await this.fileAccess.deleteMemoLines(file, startLine, endLine);
-                this.render(this.tasks, file); // Refresh
+                // Refresh global preview to update counts
+                if (this.modal) this.modal.updateTaskPreview();
+                else this.render(this.tasks, file);
             };
 
             // Click to toggle expand (prevent conflict with actions)

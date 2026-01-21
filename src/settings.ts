@@ -10,6 +10,7 @@ export interface FileTasksSettings {
     defaultShowCompleted: boolean;
     customDefaultProject: string; // New setting
     autoDateManagement: boolean;
+    showMascot: boolean;
 }
 
 export const DEFAULT_SETTINGS: FileTasksSettings = {
@@ -20,7 +21,8 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     collapsedFolders: [],
     defaultShowCompleted: true,
     customDefaultProject: '',
-    autoDateManagement: false
+    autoDateManagement: false,
+    showMascot: true
 }
 
 export class FileTasksSettingTab extends PluginSettingTab {
@@ -89,6 +91,16 @@ export class FileTasksSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.autoDateManagement)
                 .onChange(async (value) => {
                     this.plugin.settings.autoDateManagement = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Mascot')
+            .setDesc('Show a motivational mascot in the project header.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showMascot)
+                .onChange(async (value) => {
+                    this.plugin.settings.showMascot = value;
                     await this.plugin.saveSettings();
                 }));
     }

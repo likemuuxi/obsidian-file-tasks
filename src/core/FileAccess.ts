@@ -546,4 +546,121 @@ export class FileAccess {
         const finalContent = lines.join('\n');
         await this.app.vault.modify(file, finalContent);
     }
+
+    async moveTaskToProject(sourceFile: TFile, targetFile: TFile, lineNum: number) {
+        if (sourceFile.path === targetFile.path) return;
+
+        const sourceContent = await this.app.vault.read(sourceFile);
+        const sourceLines = sourceContent.split('\n');
+
+        if (lineNum < 0 || lineNum >= sourceLines.length) return;
+
+        // 1. Identify Source Block (Task + Subtree)
+        const sourceIndentLevel = this.getIndentLevel(sourceLines[lineNum]);
+        let sourceEnd = lineNum;
+        for (let i = lineNum + 1; i < sourceLines.length; i++) {
+            const line = sourceLines[i];
+            if (line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
+            sourceEnd = i;
+        }
+
+        const block = sourceLines.slice(lineNum, sourceEnd + 1);
+
+        // 2. Remove from Source
+        sourceLines.splice(lineNum, sourceEnd - lineNum + 1);
+        await this.app.vault.modify(sourceFile, sourceLines.join('\n'));
+
+        // 3. Append to Target
+        const targetContent = await this.app.vault.read(targetFile);
+        // Ensure separation
+        const newTargetContent = targetContent.endsWith('\n') ?
+            targetContent + block.join('\n') :
+            targetContent + '\n' + block.join('\n');
+
+        await this.app.vault.modify(targetFile, newTargetContent);
+    }
+
+    async getIncompleteTaskCount(file: TFile): Promise<number> {
+        const content = await this.app.vault.read(file);
+        const lines = content.split('\n');
+        let count = 0;
+        const statusRegex = /^\s*-\s\[(.)\]/;
+
+        for (const line of lines) {
+            const match = line.match(statusRegex);
+            if (match) {
+                const statusChar = match[1];
+                // Count [ ] (space) and [/] (doing) as incomplete
+                // Exclude [x] (done) and [-] (cancelled)
+                if (statusChar === ' ' || statusChar === '/') {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    async getCompletionStats(taskDirectory: string, specificFiles?: TFile[]): Promise<{ total: number, incomplete: number, rate: number }> {
+        let targetFiles: TFile[];
+
+        if (specificFiles) {
+            targetFiles = specificFiles;
+        } else {
+            const files = this.app.vault.getFiles();
+            // Filter files based on taskDirectory if set
+            targetFiles = taskDirectory && taskDirectory !== '/'
+                ? files.filter(f => f.path.startsWith(taskDirectory))
+                : files;
+        }
+
+        let totalTasks = 0;
+        let incompleteTasks = 0;
+
+        const statusRegex = /^\s*-\s\[(.)\]/;
+
+        for (const file of targetFiles) {
+            // Skip non-markdown
+            if (file.extension !== 'md') continue;
+
+            const content = await this.app.vault.read(file);
+            const lines = content.split('\n');
+
+            for (const line of lines) {
+                const match = line.match(statusRegex);
+                if (match) {
+                    const statusChar = match[1];
+                    // Count valid task lines
+                    if ([' ', 'x', '/', '-'].includes(statusChar)) {
+                        totalTasks++;
+                        // Count incomplete
+                        if (statusChar === ' ' || statusChar === '/') {
+                            incompleteTasks++;
+                        }
+                    }
+                }
+            }
+        }
+
+        const rate = totalTasks > 0 ? (incompleteTasks / totalTasks) : 0;
+        return { total: totalTasks, incomplete: incompleteTasks, rate };
+    }
+    async getMemoCount(file: TFile): Promise<number> {
+        const content = await this.app.vault.read(file);
+        const lines = content.split('\n');
+        let count = 0;
+        let memoSectionFound = false;
+
+        for (const line of lines) {
+            if (line.trim() === '# Memo') {
+                memoSectionFound = true;
+                continue;
+            }
+            if (memoSectionFound) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('#')) break;
+                if (trimmed.startsWith('- ')) count++;
+            }
+        }
+        return count;
+    }
 }
