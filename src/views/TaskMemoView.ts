@@ -23,11 +23,11 @@ export class TaskMemoView extends TaskView {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
 
-            if (line.trim() === '# Memos') {
+            if (line && line.trim() === '# Memos') {
                 memoSectionFound = true;
                 continue;
             }
-            if (memoSectionFound) {
+            if (memoSectionFound && line) {
                 const trimmedLine = line.trim();
 
                 // Stop at next section
@@ -47,8 +47,10 @@ export class TaskMemoView extends TaskView {
                 else if (memos.length > 0 && trimmedLine.length > 0) {
                     // Append to the last memo
                     const lastMemo = memos[memos.length - 1];
-                    lastMemo.content += '\n' + trimmedLine;
-                    lastMemo.endLine = i;
+                    if (lastMemo) {
+                        lastMemo.content += '\n' + trimmedLine;
+                        lastMemo.endLine = i;
+                    }
                 }
             }
         }
@@ -72,7 +74,7 @@ export class TaskMemoView extends TaskView {
             let timestamp = '';
             let text = memo;
 
-            if (match) {
+            if (match && match[1] && match[2]) {
                 timestamp = match[1];
                 text = match[2];
 
@@ -85,7 +87,7 @@ export class TaskMemoView extends TaskView {
                 const contentEl = body.createDiv({ cls: 'memo-content markdown-rendered' });
 
                 // Render Markdown
-                await MarkdownRenderer.render(this.app, text, contentEl, file.path, this);
+                await MarkdownRenderer.render(this.app, text, contentEl, file.path, this.modal.component);
             } else {
                 // Fallback structure
                 const body = item.createDiv({ cls: 'memo-body' });
@@ -93,7 +95,7 @@ export class TaskMemoView extends TaskView {
                 const cleanText = memo.replace(/^- /, '');
 
                 // Render Markdown Fallback
-                await MarkdownRenderer.render(this.app, cleanText, contentEl, file.path, this);
+                await MarkdownRenderer.render(this.app, cleanText, contentEl, file.path, this.modal.component);
             }
 
             // --- Actions Container ---
@@ -127,7 +129,7 @@ export class TaskMemoView extends TaskView {
                     await this.fileAccess.replaceMemoLines(file, startLine, endLine, newFullContent);
                     // Refresh global preview to update counts
                     if (this.modal) this.modal.updateTaskPreview();
-                    else this.render(this.tasks, file);
+                    else this.render([], file);
                 }).open();
             };
 
@@ -139,7 +141,7 @@ export class TaskMemoView extends TaskView {
                 await this.fileAccess.deleteMemoLines(file, startLine, endLine);
                 // Refresh global preview to update counts
                 if (this.modal) this.modal.updateTaskPreview();
-                else this.render(this.tasks, file);
+                else this.render([], file);
             };
 
             // Click to toggle expand (prevent conflict with actions)

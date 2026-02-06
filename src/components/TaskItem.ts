@@ -239,7 +239,7 @@ export class TaskItem {
         const contentWrapper = row.createDiv({ cls: 'preview-task-content-wrapper' });
 
         const contentSpan = contentWrapper.createSpan({ cls: 'preview-task-content' });
-        MarkdownRenderer.render(this.modal.app, this.task.content, contentSpan, this.file.path, this.modal);
+        MarkdownRenderer.render(this.modal.app, this.task.content, contentSpan, this.file.path, this.modal.component);
 
         // Priority Icon
         if (this.options.showPriority !== false && this.task.priority && this.task.priority !== 'None') {
@@ -256,7 +256,8 @@ export class TaskItem {
 
         // Metadata Icons (Dates)
         if (this.options.showDates !== false) {
-            const metaSpan = contentWrapper.createSpan({ cls: 'task-metadata', style: 'margin-left: 8px; font-size: 0.8em; color: var(--text-muted);' });
+            const metaSpan = contentWrapper.createSpan({ cls: 'task-metadata' });
+            metaSpan.style.cssText = 'margin-left: 8px; font-size: 0.8em; color: var(--text-muted);';
             // Unified Relative Format Handler
             const formatRelativeDate = DateUtils.formatRelativeDate;
 
@@ -289,7 +290,7 @@ export class TaskItem {
 
         // Remarks (Rendered before metadata to appear above dates)
         if (this.task.remarks) {
-            contentWrapper.createDiv({ cls: 'preview-task-remark', text: this.task.remarks, style: 'margin-top: 4px; color: var(--text-muted); font-size: 0.9em;' });
+            contentWrapper.createDiv({ cls: 'preview-task-remark', text: this.task.remarks }).style.cssText = 'margin-top: 4px; color: var(--text-muted); font-size: 0.9em;';
         }
 
         // Actions Button Container

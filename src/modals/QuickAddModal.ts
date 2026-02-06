@@ -1,4 +1,4 @@
-import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu, TFolder, TAbstractFile, moment } from 'obsidian';
+import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu, TFolder, TAbstractFile, moment, Component } from 'obsidian';
 import FileTasksPlugin from '../main';
 import { DateUtils } from '../utils/DateUtils';
 import { FileAccess } from '../core/FileAccess';
@@ -12,7 +12,6 @@ import { TaskKanbanView } from '../views/TaskKanbanView';
 import { TaskTimeView } from '../views/TaskTimeView';
 import { TaskQuadrantView } from '../views/TaskQuadrantView';
 import { TaskMemoView } from '../views/TaskMemoView';
-import { moment } from 'obsidian';
 
 export class QuickAddModal extends Modal {
     plugin: FileTasksPlugin;
@@ -39,6 +38,7 @@ export class QuickAddModal extends Modal {
     activeKanbanStatus: string = 'todo'; // Default to todo
     private projectStatusOverrides: Map<string, string> = new Map();
     private projectPinOverrides: Map<string, boolean> = new Map();
+    component: Component;
 
     isPinned(file: TFile): boolean {
         if (this.projectPinOverrides.has(file.path)) {
@@ -57,6 +57,7 @@ export class QuickAddModal extends Modal {
         super(app);
         this.plugin = plugin;
         this.fileAccess = new FileAccess(app);
+        this.component = new Component();
         this.showCompleted = this.plugin.settings.defaultShowCompleted;
 
         // Defaults
@@ -82,7 +83,7 @@ export class QuickAddModal extends Modal {
         // 2. If 'Select First Project' setting is on (and no custom default set), try to get the first one
         if (!foundSpecificTarget && this.plugin.settings.defaultSelectFirstProject) {
             const projects = this.getProjects(); // This returns sorted list
-            if (projects.length > 0) {
+            if (projects && projects.length > 0 && projects[0]) {
                 this.targetFile = projects[0].path;
                 foundSpecificTarget = true;
             }
@@ -112,6 +113,7 @@ export class QuickAddModal extends Modal {
 
     onOpen() {
         const { contentEl } = this;
+        this.component.load();
         this.modalEl.addClass('quick-add-modal-wrapper'); // Add class to parent modal for width control
         contentEl.addClass('quick-add-modal');
         contentEl.empty(); // Ensure clean slate
@@ -747,22 +749,24 @@ export class QuickAddModal extends Modal {
                 // Default View Submenu
                 menu.addItem((item) => {
                     item.setTitle('Default View')
-                        .setIcon('layout')
-                        .setSubmenu()
-                        .addItem((sub) => sub.setTitle('List').onClick(() => this.updateProjectView(path, 'list')))
-                        .addItem((sub) => sub.setTitle('Kanban').onClick(() => this.updateProjectView(path, 'kanban')))
-                        .addItem((sub) => sub.setTitle('Quadrant').onClick(() => this.updateProjectView(path, 'quadrant')))
-                        .addItem((sub) => sub.setTitle('Time').onClick(() => this.updateProjectView(path, 'time')));
+                        .setIcon('layout');
+
+                    const subMenu = (item as any).setSubmenu() as Menu;
+                    subMenu.addItem((sub: any) => sub.setTitle('List').onClick(() => this.updateProjectView(path, 'list')))
+                        .addItem((sub: any) => sub.setTitle('Kanban').onClick(() => this.updateProjectView(path, 'kanban')))
+                        .addItem((sub: any) => sub.setTitle('Quadrant').onClick(() => this.updateProjectView(path, 'quadrant')))
+                        .addItem((sub: any) => sub.setTitle('Time').onClick(() => this.updateProjectView(path, 'time')));
                 });
 
                 // Status Submenu
                 menu.addItem((item) => {
                     item.setTitle('Change Status')
-                        .setIcon('info')
-                        .setSubmenu()
-                        .addItem((sub) => sub.setTitle('Active').onClick(() => this.updateProjectStatus(path, 'active')))
-                        .addItem((sub) => sub.setTitle('Paused').onClick(() => this.updateProjectStatus(path, 'paused')))
-                        .addItem((sub) => sub.setTitle('Archived').onClick(() => this.updateProjectStatus(path, 'archived')));
+                        .setIcon('info');
+
+                    const subMenu = (item as any).setSubmenu() as Menu;
+                    subMenu.addItem((sub: any) => sub.setTitle('Active').onClick(() => this.updateProjectStatus(path, 'active')))
+                        .addItem((sub: any) => sub.setTitle('Paused').onClick(() => this.updateProjectStatus(path, 'paused')))
+                        .addItem((sub: any) => sub.setTitle('Archived').onClick(() => this.updateProjectStatus(path, 'archived')));
                 });
 
                 menu.addSeparator();
@@ -1132,12 +1136,20 @@ export class QuickAddModal extends Modal {
                     const task = this.parseTaskLine(line, index);
 
                     // Stack Logic for Hierarchy
-                    while (stack.length > 0 && stack[stack.length - 1].indent >= task.indent) {
-                        stack.pop();
+                    while (stack.length > 0) {
+                        const top = stack[stack.length - 1];
+                        if (top && top.indent >= task.indent) {
+                            stack.pop();
+                        } else {
+                            break;
+                        }
                     }
 
                     if (stack.length > 0) {
-                        task.parentContent = stack[stack.length - 1].content;
+                        const parent = stack[stack.length - 1];
+                        if (parent) {
+                            task.parentContent = parent.content;
+                        }
                     }
 
                     stack.push(task);
@@ -1159,7 +1171,7 @@ export class QuickAddModal extends Modal {
 
         } else {
             this.taskPreviewContainer.empty();
-            this.taskPreviewContainer.createDiv({ text: 'File not found.', style: 'color: var(--text-muted); padding: 10px;' });
+            this.taskPreviewContainer.createDiv({ text: 'File not found.', }).style.cssText = 'color: var(--text-muted); padding: 10px;';
         }
     }
 
@@ -1188,13 +1200,12 @@ export class QuickAddModal extends Modal {
         const spaceCount = indentMatch && indentMatch[1] ? indentMatch[1].replace(/\t/g, '    ').length : 0;
         const indent = Math.floor(spaceCount / 2); // Assuming 2 spaces per indent
 
-        // Metadata Parsing
         let priority = 'None';
-        if (content.includes('🔺')) { priority = 'Highest'; content = content.replace('🔺', '').trim(); }
-        else if (content.includes('⏫')) { priority = 'High'; content = content.replace('⏫', '').trim(); }
-        else if (content.includes('🔼')) { priority = 'Medium'; content = content.replace('🔼', '').trim(); }
-        else if (content.includes('🔽')) { priority = 'Low'; content = content.replace('🔽', '').trim(); }
-        else if (content.includes('⏬')) { priority = 'Lowest'; content = content.replace('⏬', '').trim(); }
+        if (content && content.includes('🔺')) { priority = 'Highest'; content = content.replace('🔺', '').trim(); }
+        else if (content && content.includes('⏫')) { priority = 'High'; content = content.replace('⏫', '').trim(); }
+        else if (content && content.includes('🔼')) { priority = 'Medium'; content = content.replace('🔼', '').trim(); }
+        else if (content && content.includes('🔽')) { priority = 'Low'; content = content.replace('🔽', '').trim(); }
+        else if (content && content.includes('⏬')) { priority = 'Lowest'; content = content.replace('⏬', '').trim(); }
 
         const dateRegex = DateUtils.getDateRegex(); // Get new instance
         let dateMatch;
@@ -1205,7 +1216,7 @@ export class QuickAddModal extends Modal {
         let completedDate: string | undefined;
         let cancelledDate: string | undefined;
 
-        while ((dateMatch = dateRegex.exec(content)) !== null) {
+        while (content && (dateMatch = dateRegex.exec(content)) !== null) {
             const type = dateMatch[1];
             const date = dateMatch[2];
 
@@ -1216,21 +1227,25 @@ export class QuickAddModal extends Modal {
             if (type === '✅') completedDate = date;
             if (type === '❌') cancelledDate = date;
 
-            // Remove from content
-            content = content.replace(dateMatch[0], '');
-
+            if (content) {
+                // Remove from content
+                content = content.replace(dateMatch[0], '');
+            }
             // CRITICAL: Reset regex index because string length changed
             dateRegex.lastIndex = 0;
         }
-        content = content.trim();
+
+        if (content) content = content.trim();
 
         // Cleaning Remarks
-        const remarkMatch = content.match(/%%(.*?)%%/);
+        const remarkMatch = content ? content.match(/%%(.*?)%%/) : null;
         let remarks = '';
-        if (remarkMatch) {
-            remarks = remarkMatch[1];
+        if (remarkMatch && content) {
+            remarks = remarkMatch[1] || '';
             content = content.replace(remarkMatch[0], '').trim();
         }
+
+        const finalContent = content || '';
 
         return {
             createdDate,
@@ -1239,7 +1254,7 @@ export class QuickAddModal extends Modal {
             line,
             lineNum: index,
             status,
-            content,
+            content: finalContent,
             indent,
             priority,
             dueDate,
@@ -1465,24 +1480,24 @@ export class QuickAddModal extends Modal {
         let content = line;
 
         if (statusMatch) {
-            content = statusMatch[2];
+            content = statusMatch[2] || '';
         }
 
         // 2. Parse Remarks %%...%%
-        const remarkMatch = content.match(/%%(.*?)%%/);
+        const remarkMatch = content ? content.match(/%%(.*?)%%/) : null;
         if (remarkMatch) {
-            this.remarks = remarkMatch[1];
+            this.remarks = remarkMatch[1] || '';
             content = content.replace(remarkMatch[0], '').trim();
         } else {
             this.remarks = '';
         }
 
         // 3. Parse Metadata
-        if (content.includes('🔺')) { this.priority = 'Highest'; content = content.replace('🔺', '').trim(); }
-        else if (content.includes('⏫')) { this.priority = 'High'; content = content.replace('⏫', '').trim(); }
-        else if (content.includes('🔼')) { this.priority = 'Medium'; content = content.replace('🔼', '').trim(); }
-        else if (content.includes('🔽')) { this.priority = 'Low'; content = content.replace('🔽', '').trim(); }
-        else if (content.includes('⏬')) { this.priority = 'Lowest'; content = content.replace('⏬', '').trim(); }
+        if (content && content.includes('🔺')) { this.priority = 'Highest'; content = content.replace('🔺', '').trim(); }
+        else if (content && content.includes('⏫')) { this.priority = 'High'; content = content.replace('⏫', '').trim(); }
+        else if (content && content.includes('🔼')) { this.priority = 'Medium'; content = content.replace('🔼', '').trim(); }
+        else if (content && content.includes('🔽')) { this.priority = 'Low'; content = content.replace('🔽', '').trim(); }
+        else if (content && content.includes('⏬')) { this.priority = 'Lowest'; content = content.replace('⏬', '').trim(); }
         else { this.priority = 'None'; }
 
         const dateRegex = DateUtils.getDateRegex();
@@ -1503,19 +1518,20 @@ export class QuickAddModal extends Modal {
             // Wait, existing code replaced T with space.
             // Let's keep consistent.
 
-            const cleanDate = date.replace('T', ' ');
 
-            if (type === '📅') this.dueDate = cleanDate;
-            if (type === '🛫') this.startDate = cleanDate;
-            if (type === '⏳') this.scheduledDate = cleanDate;
-            if (type === '➕') this.createdDate = cleanDate;
-            if (type === '✅') this.completedDate = cleanDate;
-            if (type === '❌') this.cancelledDate = cleanDate;
+            const cleanDate = date ? date.replace('T', ' ') : '';
 
-            content = content.replace(dateMatch[0], '');
+            if (type === '📅') this.dueDate = cleanDate || '';
+            if (type === '🛫') this.startDate = cleanDate || '';
+            if (type === '⏳') this.scheduledDate = cleanDate || '';
+            if (type === '➕') this.createdDate = cleanDate || '';
+            if (type === '✅') this.completedDate = cleanDate || '';
+            if (type === '❌') this.cancelledDate = cleanDate || '';
+
+            if (content) content = content.replace(dateMatch[0], '');
             dateRegex.lastIndex = 0; // Reset for text length change
         }
-        content = content.trim();
+        if (content) content = content.trim();
 
         this.description = content;
 
@@ -1551,7 +1567,7 @@ export class QuickAddModal extends Modal {
             if (file) {
                 const content = await this.app.vault.read(file);
                 const lines = content.split('\n');
-                const originalLine = lines[this.editingLineIndex];
+                const originalLine = lines[this.editingLineIndex] || '';
                 const match = originalLine.match(/^(\s*-\s\[.\])/);
                 const prefix = match ? match[1] : '- [ ]';
                 taskLine = `${prefix} ${this.description}`;
@@ -1629,24 +1645,25 @@ export class QuickAddModal extends Modal {
                     if (lines.length > this.selectedParentLineIndex) {
                         const parentLine = lines[this.selectedParentLineIndex];
                         // Calculate parent indentation
-                        const match = parentLine.match(/^(\s*)/);
-                        const parentIndentStr = match ? match[1] : '';
+                        const match = parentLine ? parentLine.match(/^(\s*)/) : null;
+                        const parentIndentStr = (match && match[1]) ? match[1] : '';
 
                         // New task indentation: parent + 1 tab (or 4 spaces, or 2 spaces)
                         // Robust: detect indentation unit. Default to '\t' or '    '.
-                        const indentUnit = parentIndentStr.includes('\t') ? '\t' : '    ';
-                        const newTaskLine = `${parentIndentStr}${indentUnit}${taskLine.trim()}`;
+                        const indentUnit = (parentIndentStr && parentIndentStr.includes('\t')) ? '\t' : '    ';
+                        const newTaskLine = `${parentIndentStr || ''}${indentUnit}${taskLine.trim()}`;
 
                         // Find Insertion Point: After parent and all its current subtasks
                         let insertIndex = this.selectedParentLineIndex + 1;
                         while (insertIndex < lines.length) {
                             const nextLine = lines[insertIndex];
+                            if (!nextLine) { insertIndex++; continue; }
                             const nextMatch = nextLine.match(/^(\s*)/);
-                            const nextIndentStr = nextMatch ? nextMatch[1] : '';
+                            const nextIndentStr = (nextMatch && nextMatch[1]) ? nextMatch[1] : '';
 
                             // If next line is indented MORE than parent, it's a child. Skip it.
                             // But we must compare length of indent string
-                            if (nextIndentStr.length > parentIndentStr.length && nextIndentStr.startsWith(parentIndentStr)) {
+                            if (parentIndentStr && nextIndentStr.length > parentIndentStr.length && nextIndentStr.startsWith(parentIndentStr)) {
                                 insertIndex++;
                             } else {
                                 break;
@@ -1664,7 +1681,8 @@ export class QuickAddModal extends Modal {
                     const lines = content.split('\n');
                     let memoLineIndex = -1;
                     for (let i = 0; i < lines.length; i++) {
-                        if (lines[i].trim() === '# Memos') {
+                        const line = lines[i];
+                        if (line && line.trim() === '# Memos') {
                             memoLineIndex = i;
                             break;
                         }
@@ -1752,14 +1770,21 @@ export class QuickAddModal extends Modal {
         const stack: TaskNode[] = []; // Stack to track parents at each level
         nodes.forEach(node => {
             // Pop stack until we find the parent (indent less than current)
-            while (stack.length > 0 && stack[stack.length - 1].indent >= node.indent) {
-                stack.pop();
+            while (stack.length > 0) {
+                const top = stack[stack.length - 1];
+                if (top && top.indent >= node.indent) {
+                    stack.pop();
+                } else {
+                    break;
+                }
             }
 
             if (stack.length > 0) {
                 const parent = stack[stack.length - 1];
-                parent.children.push(node);
-                node.parent = parent;
+                if (parent) {
+                    parent.children.push(node);
+                    node.parent = parent;
+                }
             }
 
             stack.push(node);
@@ -1814,7 +1839,7 @@ export class QuickAddModal extends Modal {
         // 3. Execute Updates
         const updateList = Array.from(updates.entries()).map(([lineNum, status]) => ({
             lineNumber: lineNum,
-            status: status
+            status: status ? 'done' : 'todo'
         }));
 
         if (updateList.length > 0) {
@@ -1825,6 +1850,7 @@ export class QuickAddModal extends Modal {
     onClose() {
         const { contentEl } = this;
         contentEl.empty();
+        this.component.unload();
     }
 }
 
