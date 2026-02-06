@@ -47,6 +47,7 @@ export class FileAccess {
         const setLineStatus = (index: number, status: string) => {
             if (visited.has(index)) return; // Prevent loop
             const line = lines[index];
+            if (!line) return;
             const match = line.match(statusRegex);
             if (match) {
                 const char = this.getStatusChar(status);
@@ -87,6 +88,7 @@ export class FileAccess {
 
         const getLineStatus = (index: number): string | null => {
             const line = lines[index];
+            if (!line) return null;
             const match = line.match(statusRegex);
             if (match) {
                 const char = match[2];
@@ -105,7 +107,7 @@ export class FileAccess {
             const targetIndent = this.getIndentLevel(initialLine);
             for (let i = lineNumber + 1; i < lines.length; i++) {
                 const l = lines[i];
-                if (l.trim() === '') continue;
+                if (!l || l.trim() === '') continue;
                 if (this.getIndentLevel(l) <= targetIndent) break; // End of subtree
 
                 // Set child status to match parent
@@ -123,7 +125,7 @@ export class FileAccess {
                 let parentIdx = -1;
                 // Find parent
                 for (let i = currentIdx - 1; i >= 0; i--) {
-                    if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) < currentIndent) {
+                    if (lines[i] && lines[i].trim() !== '' && this.getIndentLevel(lines[i]) < currentIndent) {
                         parentIdx = i;
                         break;
                     }
@@ -132,7 +134,10 @@ export class FileAccess {
                 if (parentIdx === -1) break; // No parent
 
                 const parentStatus = getLineStatus(parentIdx);
-                const parentIndent = this.getIndentLevel(lines[parentIdx]);
+                const parentLine = lines[parentIdx];
+                if (!parentStatus || !parentLine) break;
+
+                const parentIndent = this.getIndentLevel(parentLine);
 
                 // Scan Siblings
                 let siblingCount = 0;
@@ -147,7 +152,7 @@ export class FileAccess {
                 // Scan parent's block
                 for (let i = parentIdx + 1; i < lines.length; i++) {
                     const l = lines[i];
-                    if (l.trim() === '') continue;
+                    if (!l || l.trim() === '') continue;
                     const lev = this.getIndentLevel(l);
                     if (lev <= parentIndent) break; // End of parent block
 
@@ -172,7 +177,7 @@ export class FileAccess {
                     }
                 }
 
-                if (newParentStatus !== parentStatus) {
+                if (newParentStatus !== parentStatus && newParentStatus !== null) {
                     setLineStatus(parentIdx, newParentStatus);
                     currentIdx = parentIdx; // Continue up
                     continue;
@@ -201,13 +206,15 @@ export class FileAccess {
         updates.forEach(({ lineNumber, status }) => {
             if (lines.length > lineNumber) {
                 const line = lines[lineNumber];
-                const newStatusChar = this.getStatusChar(status);
-                const statusRegex = /^(\s*-\s\[).(\]\s.*)$/;
-                const match = line.match(statusRegex);
+                if (line) {
+                    const newStatusChar = this.getStatusChar(status);
+                    const statusRegex = /^(\s*-\s\[).(\]\s.*)$/;
+                    const match = line.match(statusRegex);
 
-                if (match) {
-                    lines[lineNumber] = `${match[1]}${newStatusChar}${match[2]}`;
-                    modified = true;
+                    if (match) {
+                        lines[lineNumber] = `${match[1]}${newStatusChar}${match[2]}`;
+                        modified = true;
+                    }
                 }
             }
         });
@@ -248,11 +255,12 @@ export class FileAccess {
 
         if (lineNumber >= 0 && lineNumber < lines.length) {
             let line = lines[lineNumber];
+            if (!line) return;
 
             // Remove existing priority icons
             const priorityIcons = ['🔺', '⏫', '🔼', '🔽', '⏬'];
             priorityIcons.forEach(icon => {
-                line = line.replace(icon, '').trim();
+                if (line) line = line.replace(icon, '').trim();
             });
 
             // Insert new priority icon
@@ -270,7 +278,7 @@ export class FileAccess {
                 case 'None': iconToAdd = ''; break;
             }
 
-            if (iconToAdd) {
+            if (iconToAdd && line) {
                 // Try to insert before dates if present, otherwise append
                 const dateRegex = /(📅|🛫|⏳)/;
                 const match = line.match(dateRegex);
@@ -303,12 +311,13 @@ export class FileAccess {
 
         if (lineNumber >= 0 && lineNumber < lines.length) {
             let line = lines[lineNumber];
+            if (!line) return;
 
             // Regex to separate status, content, and metadata
             const statusMatch = line.match(/^(\s*-\s\[.\]\s)(.*)$/);
             if (statusMatch) {
-                let prefix = statusMatch[1];
-                let body = statusMatch[2];
+                let prefix = statusMatch[1] || '';
+                let body = statusMatch[2] || '';
                 let metadata = '';
                 const metadataRegex = /(\s+([🔺⏫🔼🔽☕✅❌➕]|(?:🛫|⏳|📅)\s\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?|%%.*?%%).*)$/;
                 const metaMatch = body.match(metadataRegex);
@@ -317,12 +326,11 @@ export class FileAccess {
                     body = body.substring(0, body.length - metadata.length);
                 }
 
-                // Check if body starts and ends with ~~
-                if (body.startsWith('~~') && body.endsWith('~~')) {
+                if (body && body.startsWith('~~') && body.endsWith('~~')) {
                     // Remove
                     body = body.substring(2, body.length - 2);
                     // Restore status to Todo
-                    prefix = prefix.replace(/\[-\]/, '[ ]');
+                    if (prefix) prefix = prefix.replace(/\[-\]/, '[ ]');
 
                     if (autoDate) {
                         // Remove cancellation date from metadata if present
@@ -330,9 +338,9 @@ export class FileAccess {
                     }
                 } else {
                     // Add
-                    body = `~~${body}~~`;
+                    if (body) body = `~~${body}~~`;
                     // Change status to Cancelled [-]
-                    prefix = prefix.replace(/\[.\]/, '[-]');
+                    if (prefix) prefix = prefix.replace(/\[.\]/, '[-]');
 
                     if (autoDate) {
                         const today = moment().format('YYYY-MM-DD HH:mm');
@@ -359,10 +367,13 @@ export class FileAccess {
         if (sourceIndex === targetIndex && !newStatus) return;
 
         // 1. Identify Source Block
-        const sourceIndentLevel = this.getIndentLevel(lines[sourceIndex]);
+        const sourceLine = lines[sourceIndex];
+        if (!sourceLine) return;
+        const sourceIndentLevel = this.getIndentLevel(sourceLine);
         let sourceEnd = sourceIndex;
         for (let i = sourceIndex + 1; i < lines.length; i++) {
-            if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) <= sourceIndentLevel) break;
+            const line = lines[i];
+            if (line && line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
             sourceEnd = i;
         }
         let block = lines.slice(sourceIndex, sourceEnd + 1);
@@ -439,7 +450,8 @@ export class FileAccess {
                 const targetIndentLevel = this.getIndentLevel(targetLine);
                 let targetEnd = adjustedTargetIndex;
                 for (let i = adjustedTargetIndex + 1; i < lines.length; i++) {
-                    if (lines[i].trim() !== '' && this.getIndentLevel(lines[i]) <= targetIndentLevel) break;
+                    const line = lines[i];
+                    if (line && line.trim() !== '' && this.getIndentLevel(line) <= targetIndentLevel) break;
                     targetEnd = i;
                 }
                 insertIndex = targetEnd + 1;
@@ -470,12 +482,14 @@ export class FileAccess {
         if (lineIndex < 0 || lineIndex >= lines.length) return;
 
         // 1. Identify Source Block (Task + Subtree)
-        const sourceIndentLevel = this.getIndentLevel(lines[lineIndex]);
+        const sourceLine = lines[lineIndex];
+        if (!sourceLine) return;
+        const sourceIndentLevel = this.getIndentLevel(sourceLine);
         let sourceEnd = lineIndex;
         for (let i = lineIndex + 1; i < lines.length; i++) {
             const line = lines[i];
             // Stop if line is not empty and has indentation <= source
-            if (line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
+            if (line && line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
             sourceEnd = i;
         }
 
@@ -500,7 +514,9 @@ export class FileAccess {
             // Append # Memos and content at the end if not exists?
             // User requirement: "Memos are always added below # Memos".
             // If it doesn't exist, Create it.
-            if (lines[lines.length - 1].trim() !== '') {
+            // If it doesn't exist, Create it.
+            const lastLine = lines[lines.length - 1];
+            if (lastLine && lastLine.trim() !== '') {
                 lines.push('');
             }
             lines.push('# Memos');
@@ -556,11 +572,13 @@ export class FileAccess {
         if (lineNum < 0 || lineNum >= sourceLines.length) return;
 
         // 1. Identify Source Block (Task + Subtree)
-        const sourceIndentLevel = this.getIndentLevel(sourceLines[lineNum]);
+        const sourceLine = sourceLines[lineNum];
+        if (!sourceLine) return;
+        const sourceIndentLevel = this.getIndentLevel(sourceLine);
         let sourceEnd = lineNum;
         for (let i = lineNum + 1; i < sourceLines.length; i++) {
             const line = sourceLines[i];
-            if (line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
+            if (line && line.trim() !== '' && this.getIndentLevel(line) <= sourceIndentLevel) break;
             sourceEnd = i;
         }
 
@@ -572,11 +590,13 @@ export class FileAccess {
 
         // Re-indent for Target (Strip base indentation to make it root)
         if (block.length > 0) {
-            const baseIndent = this.getIndentStr(block[0]);
+            const firstLine = block[0];
+            const baseIndent = firstLine ? this.getIndentStr(firstLine) : '';
             if (baseIndent.length > 0) {
                 for (let i = 0; i < block.length; i++) {
-                    if (block[i].startsWith(baseIndent)) {
-                        block[i] = block[i].substring(baseIndent.length);
+                    const blk = block[i];
+                    if (blk && blk.startsWith(baseIndent)) {
+                        block[i] = blk.substring(baseIndent.length);
                     }
                 }
             }
@@ -662,7 +682,7 @@ export class FileAccess {
                 if (match) {
                     const statusChar = match[1];
                     // Count valid task lines
-                    if ([' ', 'x', '/', '-'].includes(statusChar)) {
+                    if (statusChar && [' ', 'x', '/', '-'].includes(statusChar)) {
                         totalTasks++;
                         // Count incomplete
                         if (statusChar === ' ' || statusChar === '/') {

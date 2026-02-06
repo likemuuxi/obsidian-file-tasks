@@ -28,16 +28,20 @@ export class TaskTreeUtils {
             // Process C: Stack [A]. A.indent (0) < C.indent (1). C is child of A. Correct.
 
             // Standard Outline logic:
-            while (stack.length > 0 && stack[stack.length - 1].indent >= task.indent) {
+            while (stack.length > 0) {
+                const last = stack[stack.length - 1];
+                if (!last || last.indent < task.indent) break;
                 stack.pop();
             }
 
             if (stack.length > 0) {
                 const parent = stack[stack.length - 1];
-                parent.children = parent.children || [];
-                parent.children.push(task);
-                // Also link parentLineNum useful for debugging or reverse lookups
-                task.parentLineNum = parent.lineNum;
+                if (parent) {
+                    parent.children = parent.children || [];
+                    parent.children.push(task);
+                    // Also link parentLineNum useful for debugging or reverse lookups
+                    task.parentLineNum = parent.lineNum;
+                }
             } else {
                 roots.push(task);
             }

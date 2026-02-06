@@ -16,7 +16,8 @@ export class TaskView extends ItemView {
     }
 
     async onOpen() {
-        const container = this.containerEl.children[1];
+        const container = this.containerEl.children[1] as HTMLElement;
+        if (!container) return;
         container.empty();
         container.createEl('h4', { text: 'Tasks View' });
         container.createDiv({ text: 'Task View is currently being refactored.' });

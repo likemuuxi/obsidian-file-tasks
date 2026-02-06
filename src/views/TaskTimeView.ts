@@ -31,7 +31,7 @@ export class TaskTimeView extends TaskView {
             const groupDiv = this.container.createDiv({ cls: 'time-group' });
             groupDiv.createDiv({ cls: 'time-group-header', text: date });
 
-            const roots = TaskTreeUtils.buildTree(groups[date]);
+            const roots = TaskTreeUtils.buildTree(groups[date] || []);
             roots.forEach(t => {
                 new TaskItem(t, this.modal, file, {
                     showIndent: false,
