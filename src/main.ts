@@ -1,6 +1,7 @@
 import { Plugin, WorkspaceLeaf, TFile } from 'obsidian';
 import { TaskView, VIEW_TYPE_FILE_TASKS } from './views/TaskView';
-import { FileTasksSettings, DEFAULT_SETTINGS, FileTasksSettingTab } from './Settings';
+import { FileTasksSettings, DEFAULT_SETTINGS } from './FileTasksSettings';
+import { FileTasksSettingTab } from './FileTasksSettingTab';
 import { QuickAddModal } from './modals/QuickAddModal';
 import { CreateProjectModal } from './modals/CreateProjectModal';
 
