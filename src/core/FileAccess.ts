@@ -121,11 +121,14 @@ export class FileAccess {
             // 3. Bubble Up (Update Parents)
             let currentIdx = lineNumber;
             while (true) {
-                const currentIndent = this.getIndentLevel(lines[currentIdx]);
+                const currentLine = lines[currentIdx];
+                if (!currentLine) break;
+                const currentIndent = this.getIndentLevel(currentLine);
                 let parentIdx = -1;
                 // Find parent
                 for (let i = currentIdx - 1; i >= 0; i--) {
-                    if (lines[i] && lines[i].trim() !== '' && this.getIndentLevel(lines[i]) < currentIndent) {
+                    const l = lines[i];
+                    if (l && l.trim() !== '' && this.getIndentLevel(l) < currentIndent) {
                         parentIdx = i;
                         break;
                     }
@@ -296,7 +299,7 @@ export class FileAccess {
     }
     private getIndentStr(line: string): string {
         const match = line.match(/^(\s*)/);
-        return match ? match[1] : '';
+        return match && match[1] ? match[1] : '';
     }
 
     private getIndentLevel(line: string): number {
@@ -322,7 +325,7 @@ export class FileAccess {
                 const metadataRegex = /(\s+([🔺⏫🔼🔽☕✅❌➕]|(?:🛫|⏳|📅)\s\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2})?|%%.*?%%).*)$/;
                 const metaMatch = body.match(metadataRegex);
                 if (metaMatch) {
-                    metadata = metaMatch[1];
+                    metadata = metaMatch[1] || '';
                     body = body.substring(0, body.length - metadata.length);
                 }
 
@@ -429,7 +432,7 @@ export class FileAccess {
         // 3. Indentation & Insertion
         const targetLine = lines[adjustedTargetIndex];
         const targetIndentStr = targetLine ? this.getIndentStr(targetLine) : '';
-        const sourceIndentStr = this.getIndentStr(block[0]);
+        const sourceIndentStr = this.getIndentStr(block[0] || '');
         const indentUnit = '\t';
 
         let insertIndex = adjustedTargetIndex;
