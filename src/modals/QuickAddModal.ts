@@ -236,6 +236,9 @@ export class QuickAddModal extends Modal {
     refreshProjectTaskCounts() {
         const projectItems = this.contentEl.querySelectorAll('.project-item');
         projectItems.forEach(async (item: HTMLElement) => {
+            // Skip default project (Inbox) as it shouldn't show count
+            if (item.hasClass('is-default')) return;
+
             const path = item.dataset.path;
             if (!path) return;
 
