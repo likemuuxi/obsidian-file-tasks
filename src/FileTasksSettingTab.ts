@@ -1,6 +1,14 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import FileTasksPlugin from './main';
-import { FileTasksSettings } from './FileTasksSettings';
+import { FileTasksSettings, ALL_VIEW_TYPES, ViewType } from './FileTasksSettings';
+
+const VIEW_LABELS: Record<ViewType, string> = {
+    'list': 'List',
+    'kanban': 'Kanban',
+    'quadrant': 'Quadrant',
+    'time': 'Time',
+    'memo': 'Memo'
+};
 
 export class FileTasksSettingTab extends PluginSettingTab {
     plugin: FileTasksPlugin;
@@ -88,6 +96,47 @@ export class FileTasksSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showMascot)
                 .onChange(async (value) => {
                     this.plugin.settings.showMascot = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        containerEl.createEl('h3', { text: 'View Settings' });
+
+        new Setting(containerEl)
+            .setName('Enabled Views')
+            .setDesc('Choose additional views to show in the Quick Add window. List and Memo are always available.')
+            .setClass('enabled-views-setting')
+            .then((setting) => {
+                const fragment = document.createDocumentFragment();
+                ALL_VIEW_TYPES.forEach(viewType => {
+                    const cb = fragment.createEl('label', { cls: 'enabled-views-checkbox' });
+                    const input = cb.createEl('input', { type: 'checkbox' });
+                    input.checked = this.plugin.settings.enabledViews.includes(viewType);
+                    input.addEventListener('change', async () => {
+                        if (input.checked) {
+                            if (!this.plugin.settings.enabledViews.includes(viewType)) {
+                                this.plugin.settings.enabledViews.push(viewType);
+                            }
+                        } else {
+                            this.plugin.settings.enabledViews = this.plugin.settings.enabledViews.filter(v => v !== viewType);
+                        }
+                        await this.plugin.saveSettings();
+                    });
+                    cb.createSpan({ text: VIEW_LABELS[viewType] });
+                    fragment.createEl('br');
+                });
+                setting.descEl.empty();
+                setting.descEl.append(fragment);
+            });
+
+        new Setting(containerEl)
+            .setName('View Switch Style')
+            .setDesc('Choose how views are displayed in the Quick Add window.')
+            .addDropdown(dropdown => dropdown
+                .addOption('tabs', 'Horizontal Tabs')
+                .addOption('dropdown', 'Dropdown Selector')
+                .setValue(this.plugin.settings.viewSwitchStyle)
+                .onChange(async (value) => {
+                    this.plugin.settings.viewSwitchStyle = value as any;
                     await this.plugin.saveSettings();
                 }));
     }

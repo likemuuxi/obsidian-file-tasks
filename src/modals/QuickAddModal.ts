@@ -1,7 +1,7 @@
 import { App, Modal, Setting, TFile, Notice, setIcon, DropdownComponent, Menu, TFolder, TAbstractFile, moment, Component } from 'obsidian';
 import FileTasksPlugin from '../main';
 import { DateUtils } from '../utils/DateUtils';
-import { FileAccess } from '../core/FileAccess';
+import { FileAccess, generateBlockId } from '../core/FileAccess';
 import { CreateProjectModal } from './CreateProjectModal';
 import { CreateFolderModal } from './CreateFolderModal';
 import { RenameFolderModal } from './RenameFolderModal';
@@ -12,6 +12,7 @@ import { TaskKanbanView } from '../views/TaskKanbanView';
 import { TaskTimeView } from '../views/TaskTimeView';
 import { TaskQuadrantView } from '../views/TaskQuadrantView';
 import { TaskMemoView } from '../views/TaskMemoView';
+import { ViewType, getLastOpenedProject, setLastOpenedProject } from '../FileTasksSettings';
 
 export class QuickAddModal extends Modal {
     plugin: FileTasksPlugin;
@@ -49,9 +50,27 @@ export class QuickAddModal extends Modal {
     }
 
     // View State
-    currentViewType: 'list' | 'kanban' | 'quadrant' | 'time' | 'memo' = 'list';
+    currentViewType: ViewType = 'list';
     views: { [key: string]: TaskView } = {};
     showCompleted: boolean = true;
+
+    getEnabledViews(): ViewType[] {
+        const views = this.plugin.settings.enabledViews.filter(v => v !== 'list' && v !== 'memo');
+        return ['list', ...views] as ViewType[];
+    }
+
+    getView(type: ViewType): TaskView {
+        if (!this.views[type]) {
+            switch (type) {
+                case 'list': this.views[type] = new TaskListView(this.app, this, this.taskPreviewContainer); break;
+                case 'kanban': this.views[type] = new TaskKanbanView(this.app, this, this.taskPreviewContainer); break;
+                case 'quadrant': this.views[type] = new TaskQuadrantView(this.app, this, this.taskPreviewContainer); break;
+                case 'time': this.views[type] = new TaskTimeView(this.app, this, this.taskPreviewContainer); break;
+                case 'memo': this.views[type] = new TaskMemoView(this.app, this, this.taskPreviewContainer); break;
+            }
+        }
+        return this.views[type];
+    }
 
     constructor(app: App, plugin: FileTasksPlugin) {
         super(app);
@@ -63,11 +82,14 @@ export class QuickAddModal extends Modal {
         // Defaults
         // 0. Priority: Remember Last Opened Project
         let foundSpecificTarget = false;
-        if (this.plugin.settings.rememberLastOpenedProject && this.plugin.settings.lastOpenedProject) {
-            const file = this.app.vault.getAbstractFileByPath(this.plugin.settings.lastOpenedProject);
-            if (file instanceof TFile) {
-                this.targetFile = file.path;
-                foundSpecificTarget = true;
+        if (this.plugin.settings.rememberLastOpenedProject) {
+            const lastOpened = getLastOpenedProject();
+            if (lastOpened) {
+                const file = this.app.vault.getAbstractFileByPath(lastOpened);
+                if (file instanceof TFile) {
+                    this.targetFile = file.path;
+                    foundSpecificTarget = true;
+                }
             }
         }
 
@@ -105,8 +127,11 @@ export class QuickAddModal extends Modal {
         if (file instanceof TFile) {
             const cache = this.app.metadataCache.getFileCache(file);
             const defaultView = cache?.frontmatter?.['defaultView'] || cache?.frontmatter?.['view'];
-            if (defaultView && ['list', 'kanban', 'quadrant', 'time', 'memo'].includes(defaultView)) {
+            const enabledViews = this.getEnabledViews();
+            if (defaultView && (enabledViews.includes(defaultView as ViewType) || defaultView === 'memo')) {
                 this.currentViewType = defaultView;
+            } else {
+                this.currentViewType = 'list';
             }
         }
     }
@@ -157,22 +182,17 @@ export class QuickAddModal extends Modal {
     }
 
     switchToNextView() {
-        const views = ['list', 'kanban', 'quadrant', 'time'];
-        const currentIndex = views.indexOf(this.currentViewType);
-        const nextIndex = (currentIndex + 1) % views.length;
-        this.currentViewType = views[nextIndex] as any;
-
-        // Update UI
-        this.updateTaskPreview();
-        const tabsContainer = this.contentEl.querySelector('.task-view-tabs');
-        if (tabsContainer) {
-            tabsContainer.querySelectorAll('.task-view-tab').forEach((el, idx) => {
-                el.removeClass('is-active');
-                if (idx === nextIndex) {
-                    el.addClass('is-active');
-                }
-            });
+        const enabledViews: ViewType[] = this.getEnabledViews().filter(v => v !== 'memo');
+        if (enabledViews.length === 0) return;
+        const currentIndex = enabledViews.indexOf(this.currentViewType);
+        const nextIndex = (currentIndex + 1) % enabledViews.length;
+        const nextView = enabledViews[nextIndex];
+        if (nextView) {
+            this.currentViewType = nextView;
         }
+
+        this.updateTaskPreview();
+        this.updateTabVisuals();
     }
 
     renderSidebar(container: HTMLElement) {
@@ -694,8 +714,7 @@ export class QuickAddModal extends Modal {
 
             // Save as Last Opened if enabled
             if (this.plugin.settings.rememberLastOpenedProject) {
-                this.plugin.settings.lastOpenedProject = path;
-                await this.plugin.saveSettings();
+                setLastOpenedProject(path);
             }
 
             // View Switching Logic based on frontmatter
@@ -752,10 +771,17 @@ export class QuickAddModal extends Modal {
                         .setIcon('layout');
 
                     const subMenu = (item as any).setSubmenu() as Menu;
-                    subMenu.addItem((sub: any) => sub.setTitle('List').onClick(() => this.updateProjectView(path, 'list')))
-                        .addItem((sub: any) => sub.setTitle('Kanban').onClick(() => this.updateProjectView(path, 'kanban')))
-                        .addItem((sub: any) => sub.setTitle('Quadrant').onClick(() => this.updateProjectView(path, 'quadrant')))
-                        .addItem((sub: any) => sub.setTitle('Time').onClick(() => this.updateProjectView(path, 'time')));
+                    const enabledViews: ViewType[] = [...this.getEnabledViews(), 'memo' as ViewType].filter((v, i, a) => a.indexOf(v) === i);
+                    const viewMenuItems: Record<ViewType, string> = {
+                        'list': 'List',
+                        'kanban': 'Kanban',
+                        'quadrant': 'Quadrant',
+                        'time': 'Time',
+                        'memo': 'Memo'
+                    };
+                    enabledViews.forEach(v => {
+                        subMenu.addItem((sub: any) => sub.setTitle(viewMenuItems[v]).onClick(() => this.updateProjectView(path, v)));
+                    });
                 });
 
                 // Status Submenu
@@ -893,15 +919,16 @@ export class QuickAddModal extends Modal {
     }
 
     async updateProjectView(path: string, view: string) {
+        const enabledViews = this.getEnabledViews();
+        if (view !== 'memo' && view !== 'list' && !enabledViews.includes(view as ViewType)) return;
         const file = this.app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile) {
             await this.app.fileManager.processFrontMatter(file, (fm) => {
                 fm['defaultView'] = view;
             });
             new Notice(`Project default view set to ${view}`);
-            // If it's the currently selected file, switch view immediately
             if (this.targetFile === path) {
-                this.currentViewType = view as any;
+                this.currentViewType = view as ViewType;
                 this.updateTabVisuals();
                 this.updateTaskPreview();
             }
@@ -920,7 +947,7 @@ export class QuickAddModal extends Modal {
             tabs = header.createDiv({ cls: 'task-view-tabs' });
             this.renderTabs(tabs);
 
-            // Add Memo Button Separately (Wrapped in its own container style)
+            const memoDivider = header.createDiv({ cls: 'task-view-divider' });
             const memoContainer = header.createDiv({ cls: 'task-view-tabs memo-tabs-container' });
             const memoBtn = memoContainer.createDiv({ cls: 'task-view-tab memo-tab-btn' });
             setIcon(memoBtn, 'sticky-note');
@@ -931,6 +958,19 @@ export class QuickAddModal extends Modal {
                 this.updateTaskPreview();
                 this.refreshInputSection();
             };
+
+            if (this.targetFile) {
+                const file = this.app.vault.getAbstractFileByPath(this.targetFile);
+                if (file instanceof TFile) {
+                    this.fileAccess.getMemoCount(file).then(count => {
+                        if (count > 0) {
+                            memoBtn.empty();
+                            memoBtn.createSpan({ cls: 'memo-count-badge', text: String(count) });
+                            memoBtn.createSpan({ text: 'Memo' });
+                        }
+                    });
+                }
+            }
 
             // Mascot Section in Header
             if (this.plugin.settings.showMascot) {
@@ -994,17 +1034,9 @@ export class QuickAddModal extends Modal {
         // Existing design had title in header.
         // We can put title on right or left. Current implementation puts tabs on left.
 
-        // Items Container
         this.taskPreviewContainer = previewCol.createDiv({ cls: 'task-preview-list' });
 
-        // Initialize Views
-        this.views = {
-            'list': new TaskListView(this.app, this, this.taskPreviewContainer),
-            'kanban': new TaskKanbanView(this.app, this, this.taskPreviewContainer),
-            'quadrant': new TaskQuadrantView(this.app, this, this.taskPreviewContainer),
-            'time': new TaskTimeView(this.app, this, this.taskPreviewContainer),
-            'memo': new TaskMemoView(this.app, this, this.taskPreviewContainer)
-        };
+        this.views = {};
 
         this.taskPreviewContainer.onclick = (e) => {
             // Handle background click to deselect if needed, but Views usually handle their own clicks.
@@ -1028,53 +1060,120 @@ export class QuickAddModal extends Modal {
 
     renderTabs(container: HTMLElement) {
         container.empty();
-        const views = [
-            { id: 'list', icon: 'list', title: 'List' },
-            { id: 'kanban', icon: 'columns', title: 'Kanban' },
-            { id: 'quadrant', icon: 'grid', title: 'Quadrant' },
-            { id: 'time', icon: 'calendar', title: 'Time' }
+        const allViews = [
+            { id: 'list' as ViewType, icon: 'list', title: 'List' },
+            { id: 'kanban' as ViewType, icon: 'columns', title: 'Kanban' },
+            { id: 'quadrant' as ViewType, icon: 'grid', title: 'Quadrant' },
+            { id: 'time' as ViewType, icon: 'calendar', title: 'Time' }
         ];
 
-        views.forEach(v => {
-            const tab = container.createDiv({ cls: 'task-view-tab' });
-            setIcon(tab, v.icon);
-            tab.createSpan({ text: v.title }); // Add Text
+        const enabledViews = this.getEnabledViews();
+        const views = allViews.filter(v => enabledViews.includes(v.id));
 
-            if (this.currentViewType === v.id) {
-                tab.addClass('is-active');
-            }
+        if (this.plugin.settings.viewSwitchStyle === 'dropdown') {
+            const dropdownWrap = container.createDiv({ cls: 'task-view-dropdown-wrap' });
+            const currentView = views.find(v => v.id === this.currentViewType) ?? views[0];
+            if (!currentView) return;
+            const label = dropdownWrap.createSpan({ cls: 'task-view-dropdown-label', text: currentView.title });
+            label.dataset.viewId = currentView.id;
+            const arrow = dropdownWrap.createSpan({ cls: 'task-view-dropdown-arrow' });
+            setIcon(arrow, 'chevron-down');
 
-            tab.onclick = () => {
-                this.currentViewType = v.id as any;
-                this.updateTaskPreview();
-                this.updateTabVisuals();
-                this.refreshInputSection();
-            };
-        });
+            label.addEventListener('click', () => {
+                const viewId = label.dataset.viewId as ViewType;
+                if (viewId && this.currentViewType !== viewId) {
+                    this.currentViewType = viewId;
+                    this.updateTaskPreview();
+                    this.updateTabVisuals();
+                    this.refreshInputSection();
+                }
+            });
+
+            let menuEl: HTMLElement | null = null;
+            const closeMenu = () => { if (menuEl) { menuEl.remove(); menuEl = null; } };
+
+            arrow.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (menuEl) { closeMenu(); return; }
+                menuEl = dropdownWrap.createDiv({ cls: 'task-view-dropdown-menu' });
+                const rect = arrow.getBoundingClientRect();
+                menuEl.style.position = 'fixed';
+                menuEl.style.left = `${rect.left}px`;
+                menuEl.style.top = `${rect.bottom + 2}px`;
+                views.forEach(v => {
+                    const item = menuEl!.createDiv({ cls: 'task-view-dropdown-item' });
+                    item.setText(v.title);
+                    if (v.id === this.currentViewType) item.addClass('is-active');
+                    item.addEventListener('click', () => {
+                        this.currentViewType = v.id;
+                        closeMenu();
+                        this.updateTaskPreview();
+                        this.updateTabVisuals();
+                        this.refreshInputSection();
+                    });
+                });
+                const onClickOutside = () => { closeMenu(); document.removeEventListener('click', onClickOutside); };
+                setTimeout(() => document.addEventListener('click', onClickOutside), 0);
+            });
+        } else {
+            views.forEach(v => {
+                const tab = container.createDiv({ cls: 'task-view-tab' });
+                setIcon(tab, v.icon);
+                tab.createSpan({ text: v.title });
+
+                if (this.currentViewType === v.id) {
+                    tab.addClass('is-active');
+                }
+
+                tab.onclick = () => {
+                    this.currentViewType = v.id;
+                    this.updateTaskPreview();
+                    this.updateTabVisuals();
+                    this.refreshInputSection();
+                };
+            });
+        }
     }
 
     updateTabVisuals() {
         // 1. Update Main Tabs
         const mainTabsContainer = this.contentEl.querySelector('.task-view-tabs');
         if (mainTabsContainer) {
-            mainTabsContainer.querySelectorAll('.task-view-tab').forEach((tab: HTMLElement) => {
-                // We need to match the tab to the view type. 
-                // Since we didn't store ID on element easily, let's just rely on text or reconstruction.
-                // Easier: In renderTabs, we assigned the click. 
-                // But now we need to find which one corresponds to currentViewType.
-                // Hack: check text content or store dataset.
-                const title = tab.innerText;
-                const viewId = title === 'List' ? 'list' :
-                    title === 'Kanban' ? 'kanban' :
-                        title === 'Quadrant' ? 'quadrant' :
-                            title === 'Time' ? 'time' : null;
-
-                if (viewId === this.currentViewType) {
-                    tab.addClass('is-active');
-                } else {
-                    tab.removeClass('is-active');
+            if (this.plugin.settings.viewSwitchStyle === 'dropdown') {
+                const label = mainTabsContainer.querySelector('.task-view-dropdown-label') as HTMLElement;
+                if (label) {
+                    const viewIdToTitle: Record<string, string> = {
+                        'list': 'List',
+                        'kanban': 'Kanban',
+                        'quadrant': 'Quadrant',
+                        'time': 'Time'
+                    };
+                    const title = viewIdToTitle[this.currentViewType];
+                    if (title) {
+                        label.setText(title);
+                        label.dataset.viewId = this.currentViewType;
+                    }
                 }
-            });
+            } else {
+                mainTabsContainer.querySelectorAll('.task-view-tab').forEach((tab: HTMLElement) => {
+                    // We need to match the tab to the view type. 
+                    // Since we didn't store ID on element easily, let's just rely on text or reconstruction.
+                    // Easier: In renderTabs, we assigned the click. 
+                    // But now we need to find which one corresponds to currentViewType.
+                    // Hack: check text content or store dataset.
+                    const title = tab.innerText;
+                    const viewId = title === 'List' ? 'list' :
+                        title === 'Kanban' ? 'kanban' :
+                            title === 'Quadrant' ? 'quadrant' :
+                                title === 'Time' ? 'time' : null;
+    
+                    if (viewId === this.currentViewType) {
+                        tab.addClass('is-active');
+                    } else {
+                        tab.removeClass('is-active');
+                    }
+                });
+            }
         }
 
         // 2. Update Memo Button
@@ -1091,7 +1190,7 @@ export class QuickAddModal extends Modal {
         }
     }
 
-    async updateTaskPreview() {
+    async updateTaskPreview(): Promise<void> {
         const previewSection = this.contentEl.querySelector('.quick-add-preview-section');
         if (!previewSection) return;
 
@@ -1119,10 +1218,18 @@ export class QuickAddModal extends Modal {
             // Update Memo Count
             // We do this here because updateTaskPreview is called on changes/switches.
             // Find memo button
-            const memoBtn = this.contentEl.querySelector('.memo-tab-btn span');
+            const memoBtn = this.contentEl.querySelector('.memo-tab-btn');
             if (memoBtn) {
                 this.fileAccess.getMemoCount(file).then(count => {
-                    memoBtn.setText(count > 0 ? `Memo (${count})` : 'Memo');
+                    const el = memoBtn as HTMLElement;
+                    el.empty();
+                    if (count > 0) {
+                        el.createSpan({ cls: 'memo-count-badge', text: String(count) });
+                        el.createSpan({ text: 'Memo' });
+                    } else {
+                        setIcon(el, 'sticky-note');
+                        el.createSpan({ text: 'Memo' });
+                    }
                 });
             }
 
@@ -1157,6 +1264,49 @@ export class QuickAddModal extends Modal {
                 }
             });
 
+            const fileCache = this.app.metadataCache.getFileCache(file);
+            const unresolvedMemoLinks: { lineNum: number; linkRaw: string }[] = [];
+            if (fileCache?.links) {
+                for (const link of fileCache.links) {
+                    const blockIdMatch = link.link.match(/#\^(memo-[\w-]+)$/);
+                    if (!blockIdMatch || !blockIdMatch[1]) continue;
+                    const memoBlockId = blockIdMatch[1];
+                    const linkPath = link.link.split('#')[0];
+                    const targetFile = linkPath
+                        ? this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path)
+                        : file;
+                    if (!targetFile) continue;
+                    const targetCache = this.app.metadataCache.getFileCache(targetFile);
+                    const blockExists = targetCache?.blocks && memoBlockId in targetCache.blocks;
+                    if (!blockExists) {
+                        const rawLine = lines[link.position.start.line];
+                        if (rawLine !== undefined) {
+                            const linkRaw = rawLine.substring(
+                                rawLine.lastIndexOf('[[', link.position.start.col),
+                                rawLine.indexOf(']]', link.position.start.col) + 2
+                            );
+                            unresolvedMemoLinks.push({
+                                lineNum: link.position.start.line,
+                                linkRaw
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (unresolvedMemoLinks.length > 0) {
+                const cleanupLines = [...lines];
+                for (const ul of unresolvedMemoLinks) {
+                    const targetLine = cleanupLines[ul.lineNum];
+                    if (targetLine !== undefined) {
+                        const escaped = ul.linkRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        cleanupLines[ul.lineNum] = targetLine.replace(new RegExp(`\\s*${escaped}`), '');
+                    }
+                }
+                await this.app.vault.modify(file, cleanupLines.join('\n'));
+                return this.updateTaskPreview();
+            }
+
             // Filter Completed
             let tasksToRender = tasks;
             if (!this.showCompleted) {
@@ -1164,7 +1314,7 @@ export class QuickAddModal extends Modal {
             }
 
             // Render Current View
-            const view = this.views[this.currentViewType];
+            const view = this.getView(this.currentViewType);
             if (view) {
                 view.render(tasksToRender, file);
             }
@@ -1247,6 +1397,19 @@ export class QuickAddModal extends Modal {
 
         const finalContent = content || '';
 
+        let blockId: string | undefined;
+        const blockIdMatch = finalContent.match(/\s*\^([a-zA-Z0-9][\w-]*)\s*$/);
+        if (blockIdMatch) {
+            blockId = blockIdMatch[1];
+        }
+
+        const linkedBlockIds: string[] = [];
+        const linkRegex = /\[\[[^\]]*#\^([\w-]+)(?:\|[^\]]*)?\]\]/g;
+        let linkMatch;
+        while ((linkMatch = linkRegex.exec(finalContent)) !== null) {
+            if (linkMatch[1]) linkedBlockIds.push(linkMatch[1]);
+        }
+
         return {
             createdDate,
             completedDate,
@@ -1261,7 +1424,9 @@ export class QuickAddModal extends Modal {
             startDate,
             scheduledDate,
             originalLine: line,
-            remarks
+            remarks,
+            blockId,
+            linkedBlockIds
         };
     }
 
@@ -1453,6 +1618,26 @@ export class QuickAddModal extends Modal {
 
     setActiveKanbanStatus(status: string) {
         this.activeKanbanStatus = status;
+    }
+
+    async linkMemoToTask(taskLineNum: number, memoContent: string, taskContent?: string) {
+        const file = this.app.vault.getAbstractFileByPath(this.targetFile);
+        if (!(file instanceof TFile)) {
+            new Notice('Target file not found.');
+            return;
+        }
+
+        const timestamp = moment().format('YYYY-MM-DD HH:mm:ss');
+        const memoLine = `- [${timestamp}] ${memoContent}`;
+
+        const blockId = await this.fileAccess.appendMemo(file, memoLine);
+        if (blockId) {
+            const fileName = file.basename;
+            const alias = memoContent.substring(0, 3);
+            await this.fileAccess.appendToTaskLine(file, taskLineNum, `[[${fileName}#^${blockId}|${alias}]]`);
+        }
+
+        this.updateTaskPreview();
     }
 
     focusInput() {

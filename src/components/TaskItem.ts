@@ -1,4 +1,4 @@
-import { setIcon, TFile, MarkdownRenderer, moment, Menu } from 'obsidian';
+import { setIcon, TFile, MarkdownRenderer, moment, Menu, Modal, App } from 'obsidian';
 import { ViewTask } from '../views/BaseTaskView';
 import { QuickAddModal } from '../modals/QuickAddModal';
 import { DateUtils } from '../utils/DateUtils';
@@ -172,8 +172,19 @@ export class TaskItem {
             const menu = new Menu();
             menu.addItem((menuItem) => {
                 menuItem
+                    .setTitle('Add Memo')
+                    .setIcon('sticky-note')
+                    .onClick(() => {
+                        new LinkMemoModal(this.modal.app, async (memoContent) => {
+                            await this.modal.linkMemoToTask(this.task.lineNum, memoContent, this.task.content);
+                        }).open();
+                    });
+            });
+
+            menu.addItem((menuItem) => {
+                menuItem
                     .setTitle('Jump to Task')
-                    .setIcon('forward') // or external-link
+                    .setIcon('forward')
                     .onClick(async () => {
                         this.modal.close();
                         const leaf = this.modal.app.workspace.getLeaf(false);
@@ -187,6 +198,7 @@ export class TaskItem {
                         }
                     });
             });
+
             menu.showAtPosition({ x: e.pageX, y: e.pageY });
         });
 
@@ -240,6 +252,117 @@ export class TaskItem {
 
         const contentSpan = contentWrapper.createSpan({ cls: 'preview-task-content' });
         MarkdownRenderer.render(this.modal.app, this.task.content, contentSpan, this.file.path, this.modal.component);
+
+        contentSpan.addEventListener('click', async (e) => {
+            const target = e.target as HTMLElement;
+            const linkEl = target.closest('a.internal-link') as HTMLAnchorElement | null;
+            if (!linkEl) return;
+
+            const href = linkEl.getAttribute('data-href') ?? linkEl.getAttribute('href') ?? '';
+            const memoBlockIdMatch = href.match(/#\^(memo-[\w-]+)/);
+            if (!memoBlockIdMatch) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            this.modal.currentViewType = 'memo';
+            this.modal.updateTabVisuals();
+            this.modal.refreshInputSection();
+            await this.modal.updateTaskPreview();
+
+            const memoBlockId = memoBlockIdMatch[1] ?? '';
+            const highlightMemo = () => {
+                const memoItems = Array.from(this.modal.contentEl.querySelectorAll('.memo-item')) as HTMLElement[];
+                for (const item of memoItems) {
+                    const rawContent = item.getAttribute('data-block-id');
+                    if (rawContent === memoBlockId || (item.textContent ?? '').includes(memoBlockId)) {
+                        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        item.addClass('is-expanded');
+                        item.addClass('memo-item-highlight');
+                        setTimeout(() => item.removeClass('memo-item-highlight'), 2000);
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            if (!highlightMemo()) {
+                setTimeout(highlightMemo, 300);
+            }
+        });
+
+        contentSpan.addEventListener('contextmenu', (e) => {
+            const target = e.target as HTMLElement;
+            const linkEl = target.closest('a.internal-link') as HTMLAnchorElement | null;
+            if (!linkEl) return;
+
+            const href = linkEl.getAttribute('data-href') ?? linkEl.getAttribute('href') ?? '';
+            const memoBlockIdMatch = href.match(/#\^(memo-[\w-]+)/);
+            if (!memoBlockIdMatch) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const memoBlockId = memoBlockIdMatch[1];
+            const linkText = linkEl.textContent ?? href;
+
+            const menu = new Menu();
+            menu.addItem((menuItem) => {
+                menuItem
+                    .setTitle('Delete Link')
+                    .setIcon('unlink')
+                    .onClick(async () => {
+                        const content = await this.modal.app.vault.read(this.file);
+                        const lines = content.split('\n');
+                        if (this.task.lineNum >= 0 && this.task.lineNum < lines.length) {
+                            const escapedHref = href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const escapedLinkText = linkText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const targetLine = lines[this.task.lineNum];
+                            if (targetLine !== undefined) {
+                                lines[this.task.lineNum] = targetLine.replace(new RegExp(`\\s*\\[\\[${escapedHref}\\|${escapedLinkText}\\]\\]`), '');
+                                await this.modal.app.vault.modify(this.file, lines.join('\n'));
+                                this.modal.updateTaskPreview();
+                            }
+                        }
+                    });
+            });
+
+            menu.addItem((menuItem) => {
+                menuItem
+                    .setTitle('Delete Link & Memo')
+                    .setIcon('trash')
+                    .onClick(async () => {
+                        const content = await this.modal.app.vault.read(this.file);
+                        const lines = content.split('\n');
+
+                        const escapedHref = href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const escapedLinkText = linkText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+                        if (this.task.lineNum >= 0 && this.task.lineNum < lines.length) {
+                            const targetLine = lines[this.task.lineNum];
+                            if (targetLine !== undefined) {
+                                lines[this.task.lineNum] = targetLine.replace(new RegExp(`\\s*\\[\\[${escapedHref}\\|${escapedLinkText}\\]\\]`), '');
+                            }
+                        }
+
+                        const memoIndex = lines.findIndex(l => l.trim() === '# Memos');
+                        if (memoIndex !== -1) {
+                            for (let i = memoIndex + 1; i < lines.length; i++) {
+                                const memoLine = lines[i];
+                                if (memoLine && memoLine.includes(`^${memoBlockId}`)) {
+                                    lines.splice(i, 1);
+                                    break;
+                                }
+                            }
+                        }
+
+                        await this.modal.app.vault.modify(this.file, lines.join('\n'));
+                        this.modal.updateTaskPreview();
+                    });
+            });
+
+            menu.showAtPosition({ x: e.pageX, y: e.pageY });
+        });
 
         // Priority Icon
         if (this.options.showPriority !== false && this.task.priority && this.task.priority !== 'None') {
@@ -401,5 +524,63 @@ export class TaskItem {
             childrenContainer.style.paddingLeft = '8px'; // Remaining indent
             childrenContainer.style.borderLeft = '1px solid var(--background-modifier-border-hover)'; // Guide line
         }
+    }
+}
+
+class LinkMemoModal extends Modal {
+    result: string = '';
+    onSubmit: (result: string) => void;
+
+    constructor(app: App, onSubmit: (result: string) => void) {
+        super(app);
+        this.onSubmit = onSubmit;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.createEl('h3', { text: 'Add Memo' });
+
+        const textareaContainer = contentEl.createDiv();
+        const textarea = textareaContainer.createEl('textarea', { cls: 'memo-edit-textarea' });
+        textarea.placeholder = 'Enter memo content...';
+        textarea.style.width = '100%';
+        textarea.style.height = '100px';
+        textarea.style.resize = 'vertical';
+
+        textarea.oninput = (e) => {
+            this.result = (e.target as HTMLTextAreaElement).value;
+        };
+
+        setTimeout(() => textarea.focus(), 50);
+
+        textarea.onkeydown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (this.result.trim()) {
+                    this.onSubmit(this.result.trim());
+                    this.close();
+                }
+            }
+        };
+
+        const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
+
+        const saveBtn = buttonContainer.createEl('button', { text: 'Link', cls: 'mod-cta' });
+        saveBtn.onclick = () => {
+            if (this.result.trim()) {
+                this.onSubmit(this.result.trim());
+                this.close();
+            }
+        };
+
+        const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+        cancelBtn.onclick = () => {
+            this.close();
+        };
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
     }
 }

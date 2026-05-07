@@ -14,6 +14,11 @@ export default class FileTasksPlugin extends Plugin {
 
 		await this.loadSettings();
 
+		this.registerHoverLinkSource('file-tasks', {
+			display: 'File Tasks',
+			defaultMod: true,
+		});
+
 		this.registerView(
 			VIEW_TYPE_FILE_TASKS,
 			(leaf) => (this.view = new TaskView(leaf, this))

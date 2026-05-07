@@ -1,3 +1,9 @@
+export type ViewType = 'list' | 'kanban' | 'quadrant' | 'time' | 'memo';
+
+export const ALL_VIEW_TYPES: ViewType[] = ['kanban', 'quadrant', 'time'];
+
+export type ViewSwitchStyle = 'tabs' | 'dropdown';
+
 export interface FileTasksSettings {
     taskDirectory: string;
     defaultTaskFile: string;
@@ -5,11 +11,22 @@ export interface FileTasksSettings {
     defaultSelectFirstProject: boolean;
     collapsedFolders: string[];
     defaultShowCompleted: boolean;
-    customDefaultProject: string; // New setting
+    customDefaultProject: string;
     autoDateManagement: boolean;
     showMascot: boolean;
     rememberLastOpenedProject: boolean;
-    lastOpenedProject: string;
+    enabledViews: ViewType[];
+    viewSwitchStyle: ViewSwitchStyle;
+}
+
+const LAST_OPENED_KEY = 'obsidian-file-tasks-last-opened-project';
+
+export function getLastOpenedProject(): string {
+    return localStorage.getItem(LAST_OPENED_KEY) || '';
+}
+
+export function setLastOpenedProject(path: string) {
+    localStorage.setItem(LAST_OPENED_KEY, path);
 }
 
 export const DEFAULT_SETTINGS: FileTasksSettings = {
@@ -23,5 +40,6 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     autoDateManagement: false,
     showMascot: true,
     rememberLastOpenedProject: true,
-    lastOpenedProject: ''
+    enabledViews: [],
+    viewSwitchStyle: 'tabs',
 }

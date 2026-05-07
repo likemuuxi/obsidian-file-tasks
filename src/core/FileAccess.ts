@@ -1,5 +1,14 @@
 import { App, TFile, moment } from 'obsidian';
 
+export function generateBlockId(prefix: string = 'memo'): string {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let id = '';
+    for (let i = 0; i < 6; i++) {
+        id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `${prefix}-${id}`;
+}
+
 export class FileAccess {
     app: App;
 
@@ -505,30 +514,41 @@ export class FileAccess {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
 
-        // Find "# Memos" line
+        const blockId = generateBlockId('memo');
+        const lineWithId = `${memoLine} ^${blockId}`;
+
         const memoIndex = lines.findIndex(l => l.trim() === '# Memos');
 
         let newContent = '';
         if (memoIndex !== -1) {
-            // Insert after # Memos header
-            lines.splice(memoIndex + 1, 0, memoLine);
+            lines.splice(memoIndex + 1, 0, lineWithId);
             newContent = lines.join('\n');
         } else {
-            // Append # Memos and content at the end if not exists?
-            // User requirement: "Memos are always added below # Memos".
-            // If it doesn't exist, Create it.
-            // If it doesn't exist, Create it.
             const lastLine = lines[lines.length - 1];
             if (lastLine && lastLine.trim() !== '') {
                 lines.push('');
             }
             lines.push('# Memos');
             lines.push('\n');
-            lines.push(memoLine);
+            lines.push(lineWithId);
             newContent = lines.join('\n');
         }
 
         await this.app.vault.modify(file, newContent);
+        return blockId;
+    }
+
+    async appendToTaskLine(file: TFile, lineNum: number, text: string) {
+        const content = await this.app.vault.read(file);
+        const lines = content.split('\n');
+
+        if (lineNum >= 0 && lineNum < lines.length) {
+            const targetLine = lines[lineNum];
+            if (targetLine !== undefined) {
+                lines[lineNum] = targetLine.trimEnd() + ' ' + text;
+                await this.app.vault.modify(file, lines.join('\n'));
+            }
+        }
     }
 
     async deleteMemoLines(file: TFile, startLine: number, endLine: number) {

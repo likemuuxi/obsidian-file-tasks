@@ -64,6 +64,19 @@
     font-size: 0.8em;
     cursor: pointer;
     padding-right: 20px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 12px;
+}
+
+.project-filter-dropdown-minimal:hover {
+    border-radius: 15px;
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+    border: none;
+    box-shadow: none;
 }
 
 .project-list {
@@ -158,10 +171,14 @@
     border-bottom: 1px solid var(--background-modifier-border-hover);
     display: flex;
     flex-direction: column;
-    /* Changed to column for remarks support */
     gap: 4px;
     line-height: 1.4;
     cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.task-item-highlight {
+    background-color: rgba(255, 224, 100, 0.25) !important;
 }
 
 .preview-task-row {
@@ -265,6 +282,24 @@
     min-width: 0;
 }
 
+.memo-item-highlight {
+    background-color: rgba(255, 224, 100, 0.25) !important;
+    border-color: rgba(255, 200, 50, 0.5) !important;
+    transition: all 0.3s ease;
+}
+
+.memo-item-highlight .memo-timestamp,
+.memo-item-highlight .memo-body,
+.memo-item-highlight .memo-content,
+.memo-item-highlight .memo-linked-task-tag {
+    color: var(--text-normal) !important;
+}
+
+.memo-item-highlight .memo-linked-task-tag .internal-link {
+    background-color: rgba(255, 224, 100, 0.3) !important;
+    color: var(--text-normal) !important;
+}
+
 /* Preview Section (Top) */
 .quick-add-preview-section {
     flex: 1;
@@ -299,6 +334,7 @@
     /* Solid background for the box */
     overflow: hidden;
     /* Contain rounded corners */
+    z-index: 999;
 }
 
 /* Parent Task Indicator */
@@ -572,6 +608,75 @@
     stroke: var(--interactive-accent);
 }
 
+.task-view-dropdown-wrap {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    background-color: var(--background-secondary);
+    padding: 1px;
+    border-radius: 20px;
+}
+
+.task-view-dropdown-label {
+    color: var(--text-muted);
+    font-size: 1em;
+    padding: 2px 4px;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.task-view-dropdown-label:hover {
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
+.task-view-dropdown-arrow {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    padding: 2px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.task-view-dropdown-arrow:hover {
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
+.task-view-dropdown-arrow svg {
+    width: 12px;
+    height: 12px;
+}
+
+.task-view-dropdown-menu {
+    z-index: 1000;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px;
+    min-width: 100px;
+}
+
+.task-view-dropdown-item {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.task-view-dropdown-item:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.task-view-dropdown-item.is-active {
+    color: var(--interactive-accent);
+    font-weight: 500;
+}
 
 /* Kanban View */
 .task-kanban-view {
@@ -1091,6 +1196,8 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 
 .memo-timestamp {
@@ -1101,6 +1208,46 @@
     padding: 2px 6px;
     border-radius: 4px;
     white-space: nowrap;
+}
+
+.memo-clock-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 2px;
+}
+
+.memo-clock-icon svg {
+    width: 12px;
+    height: 12px;
+    color: var(--text-muted);
+}
+
+.memo-linked-tasks {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.memo-linked-task-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    font-weight: 500;
+    cursor: pointer;
+    max-width: 200px;
+    transition: opacity 0.15s ease;
+}
+
+.memo-linked-task-tag .memo-task-check-icon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    overflow: visible;
 }
 
 /* Body (Content) */
@@ -1193,16 +1340,15 @@
     display: flex;
     gap: 6px;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.2s ease;
     background-color: var(--background-secondary);
-    /* Match bg to hide content behind */
     padding-left: 10px;
-    /* Fade effect space */
 }
 
-/* Show actions on hover */
 .memo-item:hover .memo-actions {
     opacity: 1;
+    pointer-events: auto;
 }
 
 /* Expanded state actions - Move to top right */
@@ -1285,6 +1431,24 @@
     display: inline;
 }
 
+.preview-task-content a.internal-link[data-href*="#^memo-"]::before {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-left: 2px;
+    margin-right: 2px;
+    margin-bottom: 2px;
+    background-color: currentColor;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.9 20A9 9 0 1 0 4 16.1L2 22Z'/%3E%3Cpath d='M8 12h.01'/%3E%3Cpath d='M12 12h.01'/%3E%3Cpath d='M16 12h.01'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.9 20A9 9 0 1 0 4 16.1L2 22Z'/%3E%3Cpath d='M8 12h.01'/%3E%3Cpath d='M12 12h.01'/%3E%3Cpath d='M16 12h.01'/%3E%3C/svg%3E");
+    mask-size: contain;
+    mask-repeat: no-repeat;
+}
+
 .kanban-column-list {
     flex-grow: 1;
     min-height: 100px;
@@ -1297,9 +1461,31 @@
 
 /* Memo Tab Container Separation */
 .memo-tabs-container {
-    margin-left: 10px !important;
     margin-right: 0 !important;
     flex-grow: 0;
+}
+
+.task-view-divider {
+    width: 1px;
+    height: 16px;
+    background-color: var(--background-modifier-border);
+    margin: 0 6px;
+    align-self: center;
+}
+
+.memo-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
 }
 
 /* Notion-like Date Tags */
