@@ -4,10 +4,10 @@ import FileTasksPlugin from '../main';
 export class CreateProjectModal extends Modal {
     plugin: FileTasksPlugin;
     projectName: string = '';
-    onCreated: (() => void) | null = null;
+    onCreated: ((filePath: string) => void) | null = null;
     basePath: string = '';
 
-    constructor(app: App, plugin: FileTasksPlugin, basePath?: string, onCreated?: () => void) {
+    constructor(app: App, plugin: FileTasksPlugin, basePath?: string, onCreated?: (filePath: string) => void) {
         super(app);
         this.plugin = plugin;
         this.basePath = basePath || '';
@@ -86,14 +86,13 @@ defaultView: list
             }
 
             const file = await this.app.vault.create(fullPath, frontmatter);
-            await this.app.workspace.getLeaf(false).openFile(file);
             new Notice(`Project "${this.projectName}" created.`);
 
             // Wait for metadata cache to update
             await new Promise(resolve => setTimeout(resolve, 300));
 
             if (this.onCreated) {
-                this.onCreated();
+                this.onCreated(fullPath);
             }
 
             this.close();

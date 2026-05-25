@@ -237,10 +237,9 @@ export class QuickAddModal extends Modal {
         setIcon(addBtn, 'plus');
         addBtn.setAttribute('title', 'New Project');
         addBtn.onclick = () => {
-            // Get currently selected folder if any, or default to root
-            // For now just root or let modal handle it
-            new CreateProjectModal(this.app, this.plugin, undefined, () => {
+            new CreateProjectModal(this.app, this.plugin, undefined, (filePath: string) => {
                 this.refreshSidebar();
+                this.selectProject(filePath);
             }).open();
         };
 
@@ -293,6 +292,18 @@ export class QuickAddModal extends Modal {
                 }
             }
         });
+    }
+
+    selectProject(filePath: string) {
+        const projectItem = this.contentEl.querySelector(`.project-item[data-path="${filePath}"]`) as HTMLElement;
+        if (projectItem) {
+            projectItem.click();
+        } else {
+            this.targetFile = filePath;
+            this.checkAndApplyDefaultView(filePath);
+            this.updateTabVisuals();
+            this.updateTaskPreview();
+        }
     }
 
     refreshSidebar(projectsOverride?: TFile[]) {
@@ -541,8 +552,9 @@ export class QuickAddModal extends Modal {
                 item.setTitle('New Project')
                     .setIcon('plus')
                     .onClick(() => {
-                        new CreateProjectModal(this.app, this.plugin, folder.path, () => {
+                        new CreateProjectModal(this.app, this.plugin, folder.path, (filePath: string) => {
                             this.refreshSidebar();
+                            this.selectProject(filePath);
                         }).open();
                     });
             });
@@ -1074,7 +1086,9 @@ export class QuickAddModal extends Modal {
             const dropdownWrap = container.createDiv({ cls: 'task-view-dropdown-wrap' });
             const currentView = views.find(v => v.id === this.currentViewType) ?? views[0];
             if (!currentView) return;
-            const label = dropdownWrap.createSpan({ cls: 'task-view-dropdown-label', text: currentView.title });
+            const label = dropdownWrap.createSpan({ cls: 'task-view-dropdown-label' });
+            setIcon(label, currentView.icon);
+            label.createSpan({ text: currentView.title });
             label.dataset.viewId = currentView.id;
             const arrow = dropdownWrap.createSpan({ cls: 'task-view-dropdown-arrow' });
             setIcon(arrow, 'chevron-down');
@@ -1102,7 +1116,8 @@ export class QuickAddModal extends Modal {
                 menuEl.style.top = `${rect.bottom + 2}px`;
                 views.forEach(v => {
                     const item = menuEl!.createDiv({ cls: 'task-view-dropdown-item' });
-                    item.setText(v.title);
+                    setIcon(item, v.icon);
+                    item.createSpan({ text: v.title });
                     if (v.id === this.currentViewType) item.addClass('is-active');
                     item.addEventListener('click', () => {
                         this.currentViewType = v.id;
@@ -1142,15 +1157,17 @@ export class QuickAddModal extends Modal {
             if (this.plugin.settings.viewSwitchStyle === 'dropdown') {
                 const label = mainTabsContainer.querySelector('.task-view-dropdown-label') as HTMLElement;
                 if (label) {
-                    const viewIdToTitle: Record<string, string> = {
-                        'list': 'List',
-                        'kanban': 'Kanban',
-                        'quadrant': 'Quadrant',
-                        'time': 'Time'
+                    const viewMap: Record<string, { title: string; icon: string }> = {
+                        'list': { title: 'List', icon: 'list' },
+                        'kanban': { title: 'Kanban', icon: 'columns' },
+                        'quadrant': { title: 'Quadrant', icon: 'grid' },
+                        'time': { title: 'Time', icon: 'calendar' }
                     };
-                    const title = viewIdToTitle[this.currentViewType];
-                    if (title) {
-                        label.setText(title);
+                    const entry = viewMap[this.currentViewType];
+                    if (entry) {
+                        label.empty();
+                        setIcon(label, entry.icon);
+                        label.createSpan({ text: entry.title });
                         label.dataset.viewId = this.currentViewType;
                     }
                 }
