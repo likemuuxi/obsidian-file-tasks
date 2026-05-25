@@ -250,6 +250,12 @@ export class TaskItem {
         // Content Wrapper
         const contentWrapper = row.createDiv({ cls: 'preview-task-content-wrapper' });
 
+        if (this.task.sourceFile && this.task.indent === 0) {
+            const badge = contentWrapper.createSpan({ cls: 'task-project-badge' });
+            badge.setText(this.task.sourceFile);
+            badge.style.backgroundColor = this.getProjectColor(this.task.sourceFile);
+        }
+
         const contentSpan = contentWrapper.createSpan({ cls: 'preview-task-content' });
         MarkdownRenderer.render(this.modal.app, this.task.content, contentSpan, this.file.path, this.modal.component);
 
@@ -521,9 +527,22 @@ export class TaskItem {
                 }).render(childrenContainer);
             });
             childrenContainer.style.marginLeft = '18px'; // Shift right to center under icon
-            childrenContainer.style.paddingLeft = '8px'; // Remaining indent
-            childrenContainer.style.borderLeft = '1px solid var(--background-modifier-border-hover)'; // Guide line
+            childrenContainer.style.paddingLeft = '8px';
+            childrenContainer.style.borderLeft = '1px solid var(--background-modifier-border-hover)';
         }
+    }
+
+    private getProjectColor(name: string): string {
+        const colors = [
+            '#e06c75', '#e5c07b', '#98c379', '#56b6c2',
+            '#61afef', '#c678dd', '#d19a66', '#be5046',
+            '#7ec8e3', '#c3e88d', '#f78c6c', '#ffcb6b',
+        ];
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return colors[Math.abs(hash) % colors.length] ?? '#e06c75';
     }
 }
 

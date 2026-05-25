@@ -33,6 +33,7 @@ export class QuickAddModal extends Modal {
     cancelledDate: string = '';
     priority: string = 'None';
     targetFile: string = '';
+    targetFolder: string | null = null;
     previewRenderId: number = 0;
     clickTimeout: any = null; // Debounce for click vs dblclick
     filterStatus: string = 'active';
@@ -344,6 +345,26 @@ export class QuickAddModal extends Modal {
         });
     }
 
+    getFilesInFolder(folder: TFolder): TFile[] {
+        const result: TFile[] = [];
+        const taskDir = this.plugin.settings.taskDirectory;
+        const traverse = (f: TFolder) => {
+            for (const child of f.children) {
+                if (child instanceof TFile) {
+                    if (child.extension === 'md' && this.isProject(child)) {
+                        if (!taskDir || taskDir === '/' || child.path.startsWith(taskDir)) {
+                            result.push(child);
+                        }
+                    }
+                } else if (child instanceof TFolder) {
+                    traverse(child);
+                }
+            }
+        };
+        traverse(folder);
+        return result.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    }
+
     // Tree Node Structure
     // Leaf: TFile (Project)
     // Node: TFolder (Folder) -> children: [Node | Leaf]
@@ -525,9 +546,9 @@ export class QuickAddModal extends Modal {
         const childrenContainer = folderWrapper.createDiv({ cls: 'project-folder-children' });
         if (isCollapsed) childrenContainer.style.display = 'none';
 
-        // Toggle Logic
-        header.onclick = async (e) => {
-            // Avoid toggling if clicking right-side actions if we add any
+        // Toggle Logic - Chevron toggles collapse
+        chevron.onclick = async (e) => {
+            e.stopPropagation();
             const currentlyCollapsed = childrenContainer.style.display === 'none';
             if (currentlyCollapsed) {
                 childrenContainer.style.display = 'block';
@@ -541,6 +562,22 @@ export class QuickAddModal extends Modal {
                 }
             }
             await this.plugin.saveSettings();
+        };
+
+        // Name click - load all tasks in this folder
+        label.onclick = (e) => {
+            e.stopPropagation();
+            this.targetFile = '';
+            this.targetFolder = folder.path;
+            this.selectedParentLineIndex = null;
+            this.selectedParentTaskContent = null;
+            this.modalEl.querySelectorAll('.project-item').forEach(el => el.removeClass('is-active'));
+            this.modalEl.querySelectorAll('.project-folder-header').forEach(el => el.removeClass('is-active'));
+            header.addClass('is-active');
+            if (this.plugin.settings.rememberLastOpenedProject) {
+                setLastOpenedProject('');
+            }
+            this.updateTaskPreview();
         };
 
         // Context Menu for Folder
@@ -718,10 +755,9 @@ export class QuickAddModal extends Modal {
 
         item.onclick = async () => {
             this.targetFile = path;
-            // Clear active from all items in sidebar (re-querying simplistic but effective)
-            // Note: Since tree structure, we might have multiple .project-list containers if recursive? 
-            // No, .project-item is class.
+            this.targetFolder = null;
             this.modalEl.querySelectorAll('.project-item').forEach(el => el.removeClass('is-active'));
+            this.modalEl.querySelectorAll('.project-folder-header').forEach(el => el.removeClass('is-active'));
             item.addClass('is-active');
 
             // Save as Last Opened if enabled
@@ -991,7 +1027,7 @@ export class QuickAddModal extends Modal {
 
             // Show Completed Toggle
             const toggleBtn = header.createDiv({ cls: 'task-view-tab show-completed-toggle' });
-            toggleBtn.style.marginLeft = 'auto'; // Push to right
+            toggleBtn.style.marginLeft = 'auto';
             toggleBtn.style.cursor = 'pointer';
             toggleBtn.title = 'Toggle Completed Tasks';
 
@@ -1217,6 +1253,38 @@ export class QuickAddModal extends Modal {
 
         // 2. Fetch and Parse
         if (!this.taskPreviewContainer) return;
+
+        // Folder mode: load tasks from all files in folder
+        if (this.targetFolder) {
+            const folder = this.app.vault.getAbstractFileByPath(this.targetFolder);
+            if (folder instanceof TFolder) {
+                const allTasks: ViewTask[] = [];
+                const mdFiles = this.getFilesInFolder(folder);
+                for (const f of mdFiles) {
+                    const content = await this.app.vault.read(f);
+                    const lines = content.split('\n');
+                    lines.forEach((line, index) => {
+                        if (line.match(/^\s*-\s\[.\]/)) {
+                            const task = this.parseTaskLine(line, index);
+                            task.sourceFile = f.basename;
+                            allTasks.push(task);
+                        }
+                    });
+                }
+
+                let tasksToRender = allTasks;
+                if (!this.showCompleted) {
+                    tasksToRender = allTasks.filter(t => t.status !== 'done');
+                }
+
+                const view = this.getView(this.currentViewType);
+                const dummyFile = mdFiles[0] || this.app.vault.getAbstractFileByPath(this.targetFile);
+                if (view && dummyFile instanceof TFile) {
+                    view.render(tasksToRender, dummyFile);
+                }
+                return;
+            }
+        }
 
         let file = this.app.vault.getAbstractFileByPath(this.targetFile);
         if (!file) {

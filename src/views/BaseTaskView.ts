@@ -22,6 +22,7 @@ export interface ViewTask {
     children?: ViewTask[];
     blockId?: string;
     linkedBlockIds?: string[];
+    sourceFile?: string;
 }
 
 export abstract class TaskView {
