@@ -13,6 +13,8 @@ import { TaskTimeView } from '../views/TaskTimeView';
 import { TaskQuadrantView } from '../views/TaskQuadrantView';
 import { TaskMemoView } from '../views/TaskMemoView';
 import { ViewType, getLastOpenedProject, setLastOpenedProject } from '../FileTasksSettings';
+import { AIService } from '../ai/AIService';
+import { getTaskParseSystemPrompt, parseTaskResponse } from '../ai/Prompts';
 
 export class QuickAddModal extends Modal {
     plugin: FileTasksPlugin;
@@ -1575,7 +1577,14 @@ export class QuickAddModal extends Modal {
         const descriptionInput = textWrapper.createEl('input', { cls: 'quick-add-description-input', type: 'text' });
         descriptionInput.placeholder = 'Describe your task...';
         descriptionInput.value = this.description;
-        descriptionInput.oninput = (e: any) => this.description = e.target.value;
+        descriptionInput.oninput = (e: any) => {
+            this.description = e.target.value;
+            if (AIService.isConfigured(this.plugin.settings) && this.description.endsWith('   ')) {
+                this.description = this.description.trimEnd();
+                descriptionInput.value = this.description;
+                this.triggerAIParse(textWrapper);
+            }
+        };
         descriptionInput.onkeydown = (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -1583,6 +1592,13 @@ export class QuickAddModal extends Modal {
             }
         };
         setTimeout(() => descriptionInput.focus(), 50);
+
+        if (AIService.isConfigured(this.plugin.settings)) {
+            const aiBtn = textWrapper.createEl('button', { cls: 'ai-parse-btn' });
+            setIcon(aiBtn, 'sparkles');
+            aiBtn.title = 'AI Parse (or press Space 3 times)';
+            aiBtn.onclick = () => this.triggerAIParse(textWrapper);
+        }
 
         // Remarks
         const remarksWrapper = inputRow.createDiv({ cls: 'quick-add-remarks-wrapper' });
@@ -1604,6 +1620,49 @@ export class QuickAddModal extends Modal {
             cls: 'mod-cta'
         });
         submitBtn.onclick = async () => await this.submit();
+    }
+
+    async triggerAIParse(textWrapper: HTMLElement) {
+        if (!this.description.trim()) {
+            new Notice('Please enter a task description first.');
+            return;
+        }
+
+        const aiBtn = textWrapper.querySelector('.ai-parse-btn') as HTMLElement;
+        if (!aiBtn || aiBtn.hasClass('ai-loading')) return;
+
+        aiBtn.addClass('ai-loading');
+        setIcon(aiBtn, 'loader');
+        try {
+            const service = new AIService(
+                this.plugin.settings.aiApiKey,
+                this.plugin.settings.aiBaseUrl,
+                this.plugin.settings.aiModel
+            );
+            const today = moment().format('YYYY-MM-DD HH:mm');
+            const result = await service.chat([
+                { role: 'system', content: getTaskParseSystemPrompt(today) },
+                { role: 'user', content: this.description }
+            ]);
+            const parsed = parseTaskResponse(result);
+            if (parsed) {
+                if (parsed.description) this.description = parsed.description;
+                if (parsed.priority && parsed.priority !== 'None') this.priority = parsed.priority;
+                if (parsed.dueDate) this.dueDate = parsed.dueDate;
+                if (parsed.startDate) this.startDate = parsed.startDate;
+                if (parsed.scheduledDate) this.scheduledDate = parsed.scheduledDate;
+                if (parsed.remarks) this.remarks = parsed.remarks;
+                this.refreshInputSection();
+                new Notice('AI parsed task successfully.');
+            } else {
+                new Notice('AI returned an invalid response. Please try again.');
+            }
+        } catch (err) {
+            new Notice(`AI error: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            aiBtn.removeClass('ai-loading');
+            setIcon(aiBtn, 'sparkles');
+        }
     }
 
     updateSelectionVisuals() {

@@ -139,5 +139,56 @@ export class FileTasksSettingTab extends PluginSettingTab {
                     this.plugin.settings.viewSwitchStyle = value as any;
                     await this.plugin.saveSettings();
                 }));
+
+        containerEl.createEl('h3', { text: 'AI Assistant' });
+
+        new Setting(containerEl)
+            .setName('Enable AI Features')
+            .setDesc('Enable AI-powered task parsing and chat features.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.aiEnabled)
+                .onChange(async (value) => {
+                    this.plugin.settings.aiEnabled = value;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+
+        if (this.plugin.settings.aiEnabled) {
+            new Setting(containerEl)
+                .setName('API Key')
+                .setDesc('Your OpenAI-compatible API key.')
+                .addText(text => text
+                    .setPlaceholder('sk-...')
+                    .setValue(this.plugin.settings.aiApiKey)
+                    .onChange(async (value) => {
+                        this.plugin.settings.aiApiKey = value;
+                        await this.plugin.saveSettings();
+                    }))
+                .then(setting => {
+                    setting.controlEl.querySelector('input')?.setAttribute('type', 'password');
+                });
+
+            new Setting(containerEl)
+                .setName('API Base URL')
+                .setDesc('Base URL for the OpenAI-compatible API endpoint.')
+                .addText(text => text
+                    .setPlaceholder('https://api.openai.com/v1')
+                    .setValue(this.plugin.settings.aiBaseUrl)
+                    .onChange(async (value) => {
+                        this.plugin.settings.aiBaseUrl = value;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(containerEl)
+                .setName('Model')
+                .setDesc('Model name to use (e.g. gpt-4o-mini, deepseek-chat).')
+                .addText(text => text
+                    .setPlaceholder('gpt-4o-mini')
+                    .setValue(this.plugin.settings.aiModel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.aiModel = value;
+                        await this.plugin.saveSettings();
+                    }));
+        }
     }
 }

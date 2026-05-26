@@ -17,6 +17,11 @@ export interface FileTasksSettings {
     rememberLastOpenedProject: boolean;
     enabledViews: ViewType[];
     viewSwitchStyle: ViewSwitchStyle;
+
+    aiEnabled: boolean;
+    aiApiKey: string;
+    aiBaseUrl: string;
+    aiModel: string;
 }
 
 const LAST_OPENED_KEY = 'obsidian-file-tasks-last-opened-project';
@@ -42,4 +47,9 @@ export const DEFAULT_SETTINGS: FileTasksSettings = {
     rememberLastOpenedProject: true,
     enabledViews: [],
     viewSwitchStyle: 'tabs',
+
+    aiEnabled: false,
+    aiApiKey: '',
+    aiBaseUrl: 'https://api.openai.com/v1',
+    aiModel: 'gpt-4o-mini',
 }

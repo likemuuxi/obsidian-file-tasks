@@ -173,7 +173,7 @@
 }
 
 .task-list-toolbar-wrapper .task-list-sort-toolbar:last-child {
-    padding-bottom: 6px;
+    padding-bottom: 3px;
 }
 
 .task-list-sort-toolbar {
@@ -588,7 +588,7 @@
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
     font-size: 0.9em;
-    padding: 4px 8px;
+    padding: 4px 36px 4px 8px;
     color: var(--text-normal);
 }
 
@@ -1846,4 +1846,55 @@
     100% {
         transform: translateY(0px);
     }
+}
+
+/* AI Parse Button */
+.quick-add-textarea-wrapper {
+    position: relative;
+}
+
+.ai-parse-btn {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none !important;
+    border: none;
+    box-shadow: none !important;
+    outline: none !important;
+    overflow: hidden;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    z-index: 2;
+}
+
+.ai-parse-btn:hover {
+    color: var(--text-accent);
+    background-color: var(--background-modifier-hover);
+}
+
+.ai-parse-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.ai-parse-btn.ai-loading {
+    pointer-events: none;
+}
+
+.ai-parse-btn.ai-loading svg {
+    animation: ai-spin 1s linear infinite;
+}
+
+@keyframes ai-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
